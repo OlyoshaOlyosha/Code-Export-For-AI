@@ -6,6 +6,47 @@ from exporter.clipboard import copy_to_clipboard
 from exporter.scanner import is_code_file
 
 
+# Default mapping from file extension to language tag for code fences
+# Used as fallback when Pygments is not available or fails
+EXTENSION_LANGUAGE_MAP = {
+    'py': 'python', 'pyw': 'python',
+    'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
+    'ts': 'typescript',
+    'jsx': 'jsx', 'tsx': 'tsx',
+    'java': 'java',
+    'c': 'c', 'h': 'c',
+    'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
+    'cs': 'csharp',
+    'go': 'go',
+    'rs': 'rust',
+    'rb': 'ruby',
+    'php': 'php',
+    'sh': 'bash', 'bash': 'bash',
+    'ps1': 'powershell', 'psm1': 'powershell', 'psd1': 'powershell',
+    'html': 'html', 'htm': 'html',
+    'css': 'css',
+    'json': 'json',
+    'yml': 'yaml', 'yaml': 'yaml',
+    'xml': 'xml',
+    'sql': 'sql',
+    'md': 'markdown', 'markdown': 'markdown',
+    'dockerfile': 'dockerfile',
+    'makefile': 'makefile',
+    'txt': '',
+    'ini': 'ini',
+    'toml': 'toml',
+    'gradle': 'groovy', 'groovy': 'groovy',
+    'dart': 'dart',
+    'kt': 'kotlin', 'kts': 'kotlin',
+    'scala': 'scala',
+    'jl': 'julia',
+    'r': 'r',
+    'swift': 'swift',
+    'erl': 'erlang',
+    'hs': 'haskell',
+}
+
+
 def read_file_content(file_path: str) -> str | None:
     """Read file content with fallback encodings."""
     encodings = ["utf-8", "cp1251", "latin-1"]
@@ -27,7 +68,6 @@ def read_file_content(file_path: str) -> str | None:
 def detect_language(file_path: str, content: str, config: Dict) -> str:
     """Detect language tag for syntax highlighting."""
     use_pygments = config.get("use_pygments", True)
-    extension_map = config.get("extension_language_map", {})
 
     if use_pygments:
         try:
@@ -36,12 +76,13 @@ def detect_language(file_path: str, content: str, config: Dict) -> str:
             if aliases := getattr(lexer, "aliases", None):
                 return aliases[0]
         except Exception:
-            pass  # Fall through to extension map
+            pass  # Fall through to fallback map
 
+    # Fallback to hardcoded extension map
     _, ext = os.path.splitext(file_path)
     if ext:
         key = ext.lower().lstrip(".")
-        return extension_map.get(key, "")
+        return EXTENSION_LANGUAGE_MAP.get(key, "")
 
     return ""
 
