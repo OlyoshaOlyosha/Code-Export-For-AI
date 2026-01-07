@@ -264,6 +264,11 @@ def print_statistics(files_by_dir, total_chars, elapsed_time, output_file, creat
 def main():
     start_time = time.time()
 
+    __version__ = "1.0.0"
+    __app_name__ = "Code Export For AI"
+
+    print(f"{__app_name__} v{__version__}")
+
     # Load configuration
     config = load_config()
     create_file = config['create_file']

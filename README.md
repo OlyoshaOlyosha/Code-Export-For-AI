@@ -1,8 +1,8 @@
-# CodeExportForAI
+# Code Export For AI
 
 Tool to export any project folder or repository into a single, neatly formatted file — ideal for quick AI-assisted code review, debugging and refactoring. The script collects source files recursively, wraps each file in fenced code blocks with relative paths, filters common noise (e.g. `node_modules`, `.git`, images), and produces a paste-ready output or copies it to the clipboard.
 
-## Why use CodeExportForAI
+## Why use Code Export For AI
 - Prepare full project context for AI quickly: paste the entire codebase into ChatGPT/Claude without manual copying.
 - Fast code review and debugging: get a consolidated snapshot to ask focused questions about structure, bugs or refactoring.
 - Share reproducible context: include relative paths and file order so AI or reviewers can follow the codebase layout.
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 ```
 
 ## Quickstart
-1. Open a terminal in the `CodeExportForAI` folder.
+1. Open a terminal in the `Code Export For AI` folder.
 2. Run:
 
 ```powershell
@@ -83,9 +83,9 @@ The script loads `config.py` from the same folder (if present). Defaults are use
 - `COPY_TO_CLIPBOARD` — whether to copy result to clipboard
 - `BLACKLIST_FILENAMES` — filenames to ignore
 - `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
- - `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
- - `USE_PYGMENTS` — (bool) enable `pygments`-based detection of fenced-code language tags (default: `True`).
- - `EXTENSION_LANGUAGE_MAP` — dict mapping extensions (no dot) to language tags used in fenced code blocks. Used as a fallback and fully user-overridable.
+- `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
+- `USE_PYGMENTS` — (bool) enable `pygments`-based detection of fenced-code language tags (default: `True`).
+- `EXTENSION_LANGUAGE_MAP` — dict mapping extensions (no dot) to language tags used in fenced code blocks. Used as a fallback and fully user-overridable.
 
 When `USE_PYGMENTS` is enabled and `pygments` is installed the script will try to auto-detect language aliases from filename+content; otherwise it falls back to `EXTENSION_LANGUAGE_MAP`. If no language is found the code fence remains untagged. To customize, edit `config.py`.
 
