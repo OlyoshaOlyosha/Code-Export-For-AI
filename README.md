@@ -1,5 +1,9 @@
 # Code Export For AI
 
+![Python](https://img.shields.io/badge/Python-3.6%2B-blue.svg)
+![Version](https://img.shields.io/github/v/release/OlyoshaOlyosha/Code-Export-For-AI?label=Version&color=orange)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
+
 Tool to export any project folder or repository into a single, neatly formatted file — ideal for quick AI-assisted code review, debugging and refactoring. The script collects source files recursively, wraps each file in fenced code blocks with relative paths, filters common noise (e.g. `node_modules`, `.git`, images), and produces a paste-ready output or copies it to the clipboard.
 
 ## Why use Code Export For AI
