@@ -35,9 +35,14 @@ def print_statistics(
     copy_to_buffer: bool,
 ) -> None:
     """Print formatted statistics after export."""
+    num_dirs = len(files_by_dir)
+    num_files = sum(len(files) for files in files_by_dir.values())
+
     print("\n=== STATISTICS ===")
     print(f"Elapsed time: {elapsed_time:.2f} sec")
     print(f"Characters: {total_chars:,} ({total_chars / 1024:.1f} KB)")
+    print(f"Directories: {num_dirs}")
+    print(f"Files: {num_files}")
 
     print("\nFiles by directory:")
     for dir_path in sorted(files_by_dir.keys()):
