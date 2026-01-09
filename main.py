@@ -29,6 +29,8 @@ def load_config() -> Dict[str, Any]:
             'use_pygments': getattr(config, 'USE_PYGMENTS', True),
             'show_progress': getattr(config, 'SHOW_PROGRESS', True),
             'include_empty_files': getattr(config, 'INCLUDE_EMPTY_FILES', False),
+            'export_structure': getattr(config, 'EXPORT_STRUCTURE', True),
+            'export_content': getattr(config, 'EXPORT_CONTENT', True),
         }
 
     except ImportError:
@@ -50,6 +52,8 @@ def load_config() -> Dict[str, Any]:
             'use_pygments': True,
             'show_progress': True,
             'include_empty_files': False,
+            'export_structure': getattr(config, 'EXPORT_STRUCTURE', True),
+            'export_content': getattr(config, 'EXPORT_CONTENT', True),
         }
     except AttributeError as e:
         print(f"WARNING: Missing setting in config.py: {e}")
@@ -71,6 +75,38 @@ def main() -> None:
     if not create_file and not copy_to_buffer:
         create_file = True
         print("File output enabled (both outputs were disabled)")
+
+    # Check export options
+    if not config.get('export_structure', True) and not config.get('export_content', True):
+        print("WARNING: Both EXPORT_STRUCTURE and EXPORT_CONTENT are disabled in config.py.")
+        print("Nothing will be exported!")
+        print("Do you want to enable code export (EXPORT_CONTENT=True) for this run?")
+        print("Press Enter for Yes, or type n and Enter to exit: ", end="")
+        
+        response = input().strip().lower()
+        
+        if response == '' or response.startswith('y'):
+            try:
+                with open('config.py', 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+
+                with open('config.py', 'w', encoding='utf-8') as f:
+                    for line in lines:
+                        if line.strip().startswith('EXPORT_CONTENT'):
+                            f.write('EXPORT_CONTENT = True    # Include file contents (code) in output\n')
+                        else:
+                            f.write(line)
+
+                print("Updated config.py: EXPORT_CONTENT set to True permanently.")
+                config['export_content'] = True
+                print("Continuing with code export enabled...\n")
+            except Exception as e:
+                print(f"Failed to update config.py: {e}")
+                print("Enabled only for this run.")
+                config['export_content'] = True
+        else:
+            print("Exiting — no content to export.")
+            return
 
     parser = argparse.ArgumentParser(description="Export code project to a single file for AI review")
     parser.add_argument('-o', '--output', help='Output file name')

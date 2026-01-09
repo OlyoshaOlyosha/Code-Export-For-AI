@@ -179,8 +179,20 @@ def export_project(
             all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-    structure = generate_project_structure(input_dir, processed_paths)
-    full_output = structure + "\n# BEGIN FILE CONTENTS\n\n" + "".join(all_content)
+    
+    full_output_parts = []
+
+    if config.get('export_structure', True):
+        structure = generate_project_structure(input_dir, processed_paths)
+        full_output_parts.append(structure)
+
+    if config.get('export_content', True):
+        if full_output_parts:  # Add separator if structure is present
+            full_output_parts.append("\n")
+        full_output_parts.append("# BEGIN FILE CONTENTS\n\n")
+        full_output_parts.append("".join(all_content))
+
+    full_output = "".join(full_output_parts)
 
     if create_file:
         with open(output_file, "w", encoding="utf-8") as f:
