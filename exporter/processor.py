@@ -64,6 +64,50 @@ def read_file_content(file_path: str) -> str | None:
     print(f"Failed to read file (all encodings failed): {file_path}")
     return None
 
+def generate_project_structure(input_dir: str, processed_paths: set) -> str:
+    """
+    Generate clean ASCII tree of the project structure
+    based on actually processed relative paths.
+    """
+    # Build tree from relative paths
+    root = {}
+    for rel_path in sorted(processed_paths):
+        parts = rel_path.replace("\\", "/").split("/")  # normalize slashes
+        current = root
+        for part in parts[:-1]:  # directories
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        # leaf is file
+        filename = parts[-1]
+        if "__files__" not in current:
+            current["__files__"] = []
+        current["__files__"].append(filename)
+
+    def render_node(node: dict, prefix: str = "") -> List[str]:
+        lines = []
+        # Get directories and files
+        dirs = [k for k in node.keys() if k != "__files__"]
+        files = sorted(node.get("__files__", []))
+
+        pointers = ["├── "] * (len(dirs) + len(files) - 1) + (["└── "] if dirs + files else [])
+
+        for i, name in enumerate(sorted(dirs) + files):
+            pointer = pointers[i]
+            is_dir = name in dirs
+            line = f"{prefix}{pointer}{name}/" if is_dir else f"{prefix}{pointer}{name}"
+            lines.append(line)
+
+            if is_dir:
+                extension = "    " if pointer == "└── " else "│   "
+                lines.extend(render_node(node[name], prefix + extension))
+
+        return lines
+
+    lines = ["# Project Directory Structure:", ".", ""]
+    lines.extend(render_node(root))
+    lines.append("")  # empty line after tree
+    return "\n".join(lines)
 
 def detect_language(file_path: str, content: str, config: Dict) -> str:
     """Detect language tag for syntax highlighting."""
@@ -100,6 +144,7 @@ def export_project(
     """
     files_by_dir = defaultdict(list)
     all_content: List[str] = []
+    processed_paths = set()
 
     for root, dirs, files in os.walk(input_dir):
         # In-place filter directories
@@ -125,6 +170,7 @@ def export_project(
             rel_path = os.path.relpath(file_path, input_dir)
             rel_dir = os.path.dirname(rel_path) or "."
             files_by_dir[rel_dir].append(os.path.basename(file))
+            processed_paths.add(rel_path)
 
             language = detect_language(file_path, content, config)
             lang_tag = language if language else ""
@@ -133,7 +179,8 @@ def export_project(
             all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-    full_output = "".join(all_content)
+    structure = generate_project_structure(input_dir, processed_paths)
+    full_output = structure + "\n# BEGIN FILE CONTENTS\n\n" + "".join(all_content)
 
     if create_file:
         with open(output_file, "w", encoding="utf-8") as f:
