@@ -27,7 +27,7 @@ BLACKLIST_FILENAMES = {'__init__.py', 'setup.py', 'requirements.txt'}
 FILENAME_FILTER_MODE = 'exact'
 
 # Output settings
-OUTPUT_FILENAME = "output.txt"
+OUTPUT_FILENAME = "outputs/output.txt"
 OUTPUT_FORMAT = 'txt'  # future: 'md'
 MAX_FILE_SIZE_MB = 1
 
