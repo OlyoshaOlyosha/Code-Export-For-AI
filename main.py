@@ -69,7 +69,7 @@ def load_config() -> Dict[str, Any]:
 
 
 def main() -> None:
-    __version__ = "1.0.0"
+    __version__ = "1.1.0"
     __app_name__ = "Code Export For AI"
 
     print(f"{__app_name__} v{__version__}")
