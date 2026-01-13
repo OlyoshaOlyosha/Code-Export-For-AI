@@ -45,13 +45,13 @@ pip install -r requirements.txt
 2. Run:
 
 ```powershell
-python code_export_for_AI.py
+python main.py
 ```
 
 Or provide a folder and output file directly:
 
 ```powershell
-python code_export_for_AI.py -d "C:\path\to\project" -o export.txt
+python main.py -d "C:\path\to\project" -o export.txt
 ```
 
 3. If you run without `-d`, a folder selection dialog opens. The script will create `output.txt` by default and may copy the content to the clipboard if enabled. Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
@@ -87,9 +87,10 @@ The script loads `config.py` from the same folder (if present). Defaults are use
 - `COPY_TO_CLIPBOARD` — whether to copy result to clipboard
 - `BLACKLIST_FILENAMES` — filenames to ignore
 - `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
-- `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
 - `USE_PYGMENTS` — (bool) enable `pygments`-based detection of fenced-code language tags (default: `True`).
 - `EXTENSION_LANGUAGE_MAP` — dict mapping extensions (no dot) to language tags used in fenced code blocks. Used as a fallback and fully user-overridable.
+- `EXPORT_STRUCTURE` — (bool) include project directory structure (ASCII tree) in output (default: `True`).
+- `EXPORT_CONTENT` — (bool) include file contents in output (default: `False`).
 
 When `USE_PYGMENTS` is enabled and `pygments` is installed the script will try to auto-detect language aliases from filename+content; otherwise it falls back to `EXTENSION_LANGUAGE_MAP`. If no language is found the code fence remains untagged. To customize, edit `config.py`.
 
