@@ -1,11 +1,15 @@
 import os
 import tkinter as tk
 from tkinter import filedialog
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
-def select_directory() -> str | None:
-    """Open a GUI dialog to select a project directory."""
+def select_directory() -> Optional[str]:
+    """Open a GUI dialog to select a project directory.
+
+    Returns:
+        The selected directory path or None if no selection was made.
+    """
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -15,7 +19,14 @@ def select_directory() -> str | None:
 
 
 def get_next_filename(base_name: str) -> str:
-    """Generate unique filename by adding _1, _2 etc. if needed."""
+    """Generate unique filename by adding _1, _2 etc. if needed.
+
+    Args:
+        base_name: The base filename to check for uniqueness.
+
+    Returns:
+        A unique filename.
+    """
     if not os.path.exists(base_name):
         return base_name
 
@@ -34,7 +45,16 @@ def print_statistics(
     create_file: bool,
     copy_to_buffer: bool,
 ) -> None:
-    """Print formatted statistics after export."""
+    """Print formatted statistics after export.
+
+    Args:
+        files_by_dir: Dictionary mapping directories to lists of files.
+        total_chars: Total number of characters in the exported content.
+        elapsed_time: Time taken for the export process.
+        output_file: Path to the output file.
+        create_file: Whether a file was created.
+        copy_to_buffer: Whether content was copied to clipboard.
+    """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
 

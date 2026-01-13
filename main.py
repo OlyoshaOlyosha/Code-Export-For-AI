@@ -1,65 +1,71 @@
 import argparse
 import os
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from exporter.processor import export_project
 from exporter.utils import get_next_filename, print_statistics, select_directory
 
 
+def get_default_config() -> Dict[str, Any]:
+    """Get default configuration values.
+
+    Returns:
+        Dict[str, Any]: Default configuration dictionary.
+    """
+    return {
+        'blacklist_extensions': set(),
+        'blacklist_dirs': set(),
+        'blacklist_filenames': set(),
+        'filename_filter_mode': 'exact',
+        'default_output': 'output.txt',
+        'output_format': 'txt',
+        'max_size': 1 * 1024 * 1024,
+        'create_file': True,
+        'copy_to_buffer': True,
+        'use_pygments': True,
+        'show_progress': True,
+        'include_empty_files': False,
+        'export_structure': True,
+        'export_content': True,
+    }
+
+
 def load_config() -> Dict[str, Any]:
-    """Load configuration from config.py."""
+    """Load configuration from config.py.
+
+    Returns:
+        Dict[str, Any]: Configuration dictionary with default values if config.py is missing or invalid.
+    """
     try:
         import config
-
         print("Configuration loaded from config.py")
-
         return {
             'blacklist_extensions': getattr(config, 'BLACKLIST_EXTENSIONS', set()),
             'blacklist_dirs': getattr(config, 'BLACKLIST_DIRS', set()),
             'blacklist_filenames': getattr(config, 'BLACKLIST_FILENAMES', set()),
             'filename_filter_mode': getattr(config, 'FILENAME_FILTER_MODE', 'exact'),
-
             'default_output': getattr(config, 'OUTPUT_FILENAME', 'output.txt'),
             'output_format': getattr(config, 'OUTPUT_FORMAT', 'txt'),
             'max_size': getattr(config, 'MAX_FILE_SIZE_MB', 1) * 1024 * 1024,
             'create_file': getattr(config, 'CREATE_FILE', True),
             'copy_to_buffer': getattr(config, 'COPY_TO_CLIPBOARD', True),
-
             'use_pygments': getattr(config, 'USE_PYGMENTS', True),
             'show_progress': getattr(config, 'SHOW_PROGRESS', True),
             'include_empty_files': getattr(config, 'INCLUDE_EMPTY_FILES', False),
             'export_structure': getattr(config, 'EXPORT_STRUCTURE', True),
             'export_content': getattr(config, 'EXPORT_CONTENT', True),
         }
-
     except ImportError:
         print("ERROR: config.py not found!")
         print("Please copy config.py from the repository: https://github.com/OlyoshaOlyosha/Code-Export-For-AI")
         print("The tool requires proper configuration to filter out binaries, vendor folders, etc.")
         print("Running with empty filters — this may include unwanted files and make output huge.")
-
-        return {
-            'blacklist_extensions': set(),
-            'blacklist_dirs': set(),
-            'blacklist_filenames': set(),
-            'filename_filter_mode': 'exact',
-            'default_output': 'output.txt',
-            'output_format': 'txt',
-            'max_size': 1 * 1024 * 1024,
-            'create_file': True,
-            'copy_to_buffer': True,
-            'use_pygments': True,
-            'show_progress': True,
-            'include_empty_files': False,
-            'export_structure': getattr(config, 'EXPORT_STRUCTURE', True),
-            'export_content': getattr(config, 'EXPORT_CONTENT', True),
-        }
+        return get_default_config()
     except AttributeError as e:
         print(f"WARNING: Missing setting in config.py: {e}")
         print("Using safe fallback values.")
-
-        return load_config()
+        return get_default_config()
 
 
 def main() -> None:

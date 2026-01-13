@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from exporter.clipboard import copy_to_clipboard
 from exporter.scanner import is_code_file
@@ -8,7 +8,7 @@ from exporter.scanner import is_code_file
 
 # Default mapping from file extension to language tag for code fences
 # Used as fallback when Pygments is not available or fails
-EXTENSION_LANGUAGE_MAP = {
+EXTENSION_LANGUAGE_MAP: Dict[str, str] = {
     'py': 'python', 'pyw': 'python',
     'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
     'ts': 'typescript',
@@ -47,8 +47,15 @@ EXTENSION_LANGUAGE_MAP = {
 }
 
 
-def read_file_content(file_path: str) -> str | None:
-    """Read file content with fallback encodings."""
+def read_file_content(file_path: str) -> Optional[str]:
+    """Read file content with fallback encodings.
+
+    Args:
+        file_path: Path to the file to read.
+
+    Returns:
+        The file content as a string, or None if reading failed.
+    """
     encodings = ["utf-8", "cp1251", "latin-1"]
 
     for encoding in encodings:
@@ -64,10 +71,15 @@ def read_file_content(file_path: str) -> str | None:
     print(f"Failed to read file (all encodings failed): {file_path}")
     return None
 
-def generate_project_structure(input_dir: str, processed_paths: set) -> str:
-    """
-    Generate clean ASCII tree of the project structure
-    based on actually processed relative paths.
+def generate_project_structure(input_dir: str, processed_paths: Set[str]) -> str:
+    """Generate clean ASCII tree of the project structure based on processed relative paths.
+
+    Args:
+        input_dir: Path to the input directory.
+        processed_paths: Set of relative paths that were processed.
+
+    Returns:
+        A string representation of the project structure as an ASCII tree.
     """
     # Build tree from relative paths
     root = {}
@@ -109,8 +121,17 @@ def generate_project_structure(input_dir: str, processed_paths: set) -> str:
     lines.append("")  # empty line after tree
     return "\n".join(lines)
 
-def detect_language(file_path: str, content: str, config: Dict) -> str:
-    """Detect language tag for syntax highlighting."""
+def detect_language(file_path: str, content: str, config: Dict[str, Any]) -> str:
+    """Detect language tag for syntax highlighting.
+
+    Args:
+        file_path: Path to the file.
+        content: Content of the file.
+        config: Configuration dictionary.
+
+    Returns:
+        The language tag for syntax highlighting, or empty string if not detected.
+    """
     use_pygments = config.get("use_pygments", True)
 
     if use_pygments:
@@ -134,13 +155,21 @@ def detect_language(file_path: str, content: str, config: Dict) -> str:
 def export_project(
     input_dir: str,
     output_file: str,
-    config: Dict,
+    config: Dict[str, Any],
     create_file: bool = True,
     copy_to_buffer: bool = False,
-) -> Tuple[dict, int]:
-    """
-    Main export function: scan, filter, read, format and output project files.
-    Returns (files_by_dir dict, total_chars).
+) -> Tuple[Dict[str, List[str]], int]:
+    """Main export function: scan, filter, read, format and output project files.
+
+    Args:
+        input_dir: Path to the input directory.
+        output_file: Path to the output file.
+        config: Configuration dictionary.
+        create_file: Whether to create the output file.
+        copy_to_buffer: Whether to copy the output to clipboard.
+
+    Returns:
+        A tuple containing a dictionary of files by directory and total character count.
     """
     files_by_dir = defaultdict(list)
     all_content: List[str] = []
@@ -150,8 +179,8 @@ def export_project(
         # In-place filter directories
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
 
-        for file in files:
-            file_path = os.path.join(root, file)
+        for filename in files:
+            file_path = os.path.join(root, filename)
 
             if not is_code_file(
                 file_path,
@@ -169,7 +198,7 @@ def export_project(
 
             rel_path = os.path.relpath(file_path, input_dir)
             rel_dir = os.path.dirname(rel_path) or "."
-            files_by_dir[rel_dir].append(os.path.basename(file))
+            files_by_dir[rel_dir].append(os.path.basename(filename))
             processed_paths.add(rel_path)
 
             language = detect_language(file_path, content, config)

@@ -10,8 +10,18 @@ def is_code_file(
     filename_filter_mode: str,
     max_size: Optional[int] = None,
 ) -> bool:
-    """
-    Determine if a file should be included in the export based on filters.
+    """Determine if a file should be included in the export based on filters.
+
+    Args:
+        file_path: Path to the file to check.
+        blacklist_extensions: Set of file extensions to exclude.
+        blacklist_dirs: Set of directory names to exclude.
+        blacklist_filenames: Set of filenames to exclude.
+        filename_filter_mode: Mode for filename filtering ('exact' or 'contains').
+        max_size: Maximum file size in bytes, or None for no limit.
+
+    Returns:
+        True if the file should be included, False otherwise.
     """
     filename = os.path.basename(file_path)
 

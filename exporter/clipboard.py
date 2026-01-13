@@ -1,24 +1,28 @@
 import shutil
 import subprocess
 import sys
+from typing import List
 
 
 def copy_to_clipboard(text: str) -> bool:
-    """
-    Copy text to clipboard in a cross-platform way.
+    """Copy text to clipboard in a cross-platform way.
 
     Order of attempts:
     1. pyperclip (if installed)
     2. Native tools: clip (Windows), pbcopy (macOS), xclip/xsel (Linux)
 
-    Returns True on success, False otherwise.
+    Args:
+        text: The text to copy to the clipboard.
+
+    Returns:
+        True on success, False otherwise.
     """
     # Try pyperclip first
     try:
         import pyperclip
         pyperclip.copy(text)
         return True
-    except Exception:
+    except ImportError:
         pass
 
     # Fallback to native tools
@@ -35,7 +39,11 @@ def copy_to_clipboard(text: str) -> bool:
         # Linux
         for cmd in ("xclip", "xsel"):
             if shutil.which(cmd):
-                args = ["xclip", "-selection", "clipboard"] if cmd == "xclip" else ["xsel", "--clipboard", "--input"]
+                args: List[str] = (
+                    ["xclip", "-selection", "clipboard"]
+                    if cmd == "xclip"
+                    else ["xsel", "--clipboard", "--input"]
+                )
                 p = subprocess.Popen(args, stdin=subprocess.PIPE, text=True)
                 p.communicate(text)
                 return p.returncode == 0
