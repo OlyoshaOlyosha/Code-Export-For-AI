@@ -1,4 +1,2 @@
-# Optional dependency for cross-platform clipboard support
-pyperclip>=1.8.0
-# Optional dependency for language detection (recommended)
-pygments>=2.10.0
+Pygments==2.19.2
+pyperclip==1.8.2
