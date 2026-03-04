@@ -5,30 +5,43 @@ Edit this file to customize filtering and behavior.
 
 # File extensions to ignore (without dot)
 BLACKLIST_EXTENSIONS = {
-    'txt', 'md', 'markdown', 'log', 'pdf', 'doc', 'docx', 'xls', 'xlsx',
-    'png', 'jpg', 'jpeg', 'gif', 'bmp', 'ico', 'svg', 'webp',
-    'mp3', 'mp4', 'avi', 'mov', 'wav',
-    'zip', 'rar', '7z', 'tar', 'gz',
-    'exe', 'dll', 'so', 'bin', 'o', 'obj',
-    'pyc', 'pyo', 'pyd', 'class',
-    'db', 'sqlite', 'mdb',
-    'ini', 'cfg', 'conf', 'config', 'env'
+    "txt", "md", "markdown", "log", "pdf", "doc", "docx", "xls", "xlsx",
+    "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp",
+    "mp3", "mp4", "avi", "mov", "wav",
+    "zip", "rar", "7z", "tar", "gz",
+    "exe", "dll", "so", "bin", "o", "obj",
+    "pyc", "pyo", "pyd", "class",
+    "db", "sqlite", "mdb",
+    "ini", "cfg", "conf", "config", "env",
 }
 
 # Directories to completely skip
 BLACKLIST_DIRS = {
-    '__pycache__', '.git', '.vscode', '.vs', '.idea', 'node_modules',
-    'obj', 'bin', 'venv', 'env', 'virtualenv', 'dist', 'build', 'target', 'packages'
+    "__pycache__",
+    ".git",
+    ".vscode",
+    ".vs",
+    ".idea",
+    "node_modules",
+    "obj",
+    "bin",
+    "venv",
+    "env",
+    "virtualenv",
+    "dist",
+    "build",
+    "target",
+    "packages",
 }
 # Filenames to ignore
-BLACKLIST_FILENAMES = {'__init__.py', 'setup.py', 'requirements.txt'}
+BLACKLIST_FILENAMES = {"__init__.py", "setup.py", "requirements.txt"}
 
 # Filename matching mode: 'exact' or 'contains'
-FILENAME_FILTER_MODE = 'exact'
+FILENAME_FILTER_MODE = "exact"
 
 # Output settings
 OUTPUT_FILENAME = "outputs/output.txt"
-OUTPUT_FORMAT = 'txt'  # future: 'md'
+OUTPUT_FORMAT = "txt"  # future: 'md'
 MAX_FILE_SIZE_MB = 1
 
 CREATE_FILE = True
