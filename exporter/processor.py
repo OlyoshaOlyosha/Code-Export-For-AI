@@ -1,53 +1,68 @@
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from exporter.clipboard import copy_to_clipboard
 from exporter.scanner import is_code_file
 
-
 # Default mapping from file extension to language tag for code fences
 # Used as fallback when Pygments is not available or fails
-EXTENSION_LANGUAGE_MAP: Dict[str, str] = {
-    'py': 'python', 'pyw': 'python',
-    'js': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
-    'ts': 'typescript',
-    'jsx': 'jsx', 'tsx': 'tsx',
-    'java': 'java',
-    'c': 'c', 'h': 'c',
-    'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp',
-    'cs': 'csharp',
-    'go': 'go',
-    'rs': 'rust',
-    'rb': 'ruby',
-    'php': 'php',
-    'sh': 'bash', 'bash': 'bash',
-    'ps1': 'powershell', 'psm1': 'powershell', 'psd1': 'powershell',
-    'html': 'html', 'htm': 'html',
-    'css': 'css',
-    'json': 'json',
-    'yml': 'yaml', 'yaml': 'yaml',
-    'xml': 'xml',
-    'sql': 'sql',
-    'md': 'markdown', 'markdown': 'markdown',
-    'dockerfile': 'dockerfile',
-    'makefile': 'makefile',
-    'txt': '',
-    'ini': 'ini',
-    'toml': 'toml',
-    'gradle': 'groovy', 'groovy': 'groovy',
-    'dart': 'dart',
-    'kt': 'kotlin', 'kts': 'kotlin',
-    'scala': 'scala',
-    'jl': 'julia',
-    'r': 'r',
-    'swift': 'swift',
-    'erl': 'erlang',
-    'hs': 'haskell',
+EXTENSION_LANGUAGE_MAP: dict[str, str] = {
+    "py": "python",
+    "pyw": "python",
+    "js": "javascript",
+    "mjs": "javascript",
+    "cjs": "javascript",
+    "ts": "typescript",
+    "jsx": "jsx",
+    "tsx": "tsx",
+    "java": "java",
+    "c": "c",
+    "h": "c",
+    "cpp": "cpp",
+    "cc": "cpp",
+    "cxx": "cpp",
+    "hpp": "cpp",
+    "cs": "csharp",
+    "go": "go",
+    "rs": "rust",
+    "rb": "ruby",
+    "php": "php",
+    "sh": "bash",
+    "bash": "bash",
+    "ps1": "powershell",
+    "psm1": "powershell",
+    "psd1": "powershell",
+    "html": "html",
+    "htm": "html",
+    "css": "css",
+    "json": "json",
+    "yml": "yaml",
+    "yaml": "yaml",
+    "xml": "xml",
+    "sql": "sql",
+    "md": "markdown",
+    "markdown": "markdown",
+    "dockerfile": "dockerfile",
+    "makefile": "makefile",
+    "txt": "",
+    "ini": "ini",
+    "toml": "toml",
+    "gradle": "groovy",
+    "groovy": "groovy",
+    "dart": "dart",
+    "kt": "kotlin",
+    "kts": "kotlin",
+    "scala": "scala",
+    "jl": "julia",
+    "r": "r",
+    "swift": "swift",
+    "erl": "erlang",
+    "hs": "haskell",
 }
 
 
-def read_file_content(file_path: str) -> Optional[str]:
+def read_file_content(file_path: str) -> str | None:
     """Read file content with fallback encodings.
 
     Args:
@@ -55,12 +70,13 @@ def read_file_content(file_path: str) -> Optional[str]:
 
     Returns:
         The file content as a string, or None if reading failed.
+
     """
     encodings = ["utf-8", "cp1251", "latin-1"]
 
     for encoding in encodings:
         try:
-            with open(file_path, "r", encoding=encoding) as f:
+            with open(file_path, encoding=encoding) as f:
                 return f.read()
         except UnicodeDecodeError:
             continue
@@ -71,7 +87,8 @@ def read_file_content(file_path: str) -> Optional[str]:
     print(f"Failed to read file (all encodings failed): {file_path}")
     return None
 
-def generate_project_structure(input_dir: str, processed_paths: Set[str]) -> str:
+
+def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
     Args:
@@ -80,6 +97,7 @@ def generate_project_structure(input_dir: str, processed_paths: Set[str]) -> str
 
     Returns:
         A string representation of the project structure as an ASCII tree.
+
     """
     # Build tree from relative paths
     root = {}
@@ -96,10 +114,10 @@ def generate_project_structure(input_dir: str, processed_paths: Set[str]) -> str
             current["__files__"] = []
         current["__files__"].append(filename)
 
-    def render_node(node: dict, prefix: str = "") -> List[str]:
+    def render_node(node: dict, prefix: str = "") -> list[str]:
         lines = []
         # Get directories and files
-        dirs = [k for k in node.keys() if k != "__files__"]
+        dirs = [k for k in node if k != "__files__"]
         files = sorted(node.get("__files__", []))
 
         pointers = ["├── "] * (len(dirs) + len(files) - 1) + (["└── "] if dirs + files else [])
@@ -121,7 +139,8 @@ def generate_project_structure(input_dir: str, processed_paths: Set[str]) -> str
     lines.append("")  # empty line after tree
     return "\n".join(lines)
 
-def detect_language(file_path: str, content: str, config: Dict[str, Any]) -> str:
+
+def detect_language(file_path: str, content: str, config: dict[str, Any]) -> str:
     """Detect language tag for syntax highlighting.
 
     Args:
@@ -131,12 +150,14 @@ def detect_language(file_path: str, content: str, config: Dict[str, Any]) -> str
 
     Returns:
         The language tag for syntax highlighting, or empty string if not detected.
+
     """
     use_pygments = config.get("use_pygments", True)
 
     if use_pygments:
         try:
             from pygments.lexers import guess_lexer_for_filename
+
             lexer = guess_lexer_for_filename(file_path, content)
             if aliases := getattr(lexer, "aliases", None):
                 return aliases[0]
@@ -155,10 +176,10 @@ def detect_language(file_path: str, content: str, config: Dict[str, Any]) -> str
 def export_project(
     input_dir: str,
     output_file: str,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     create_file: bool = True,
     copy_to_buffer: bool = False,
-) -> Tuple[Dict[str, List[str]], int]:
+) -> tuple[dict[str, list[str]], int]:
     """Main export function: scan, filter, read, format and output project files.
 
     Args:
@@ -170,9 +191,10 @@ def export_project(
 
     Returns:
         A tuple containing a dictionary of files by directory and total character count.
+
     """
     files_by_dir = defaultdict(list)
-    all_content: List[str] = []
+    all_content: list[str] = []
     processed_paths = set()
 
     for root, dirs, files in os.walk(input_dir):
@@ -202,20 +224,20 @@ def export_project(
             processed_paths.add(rel_path)
 
             language = detect_language(file_path, content, config)
-            lang_tag = language if language else ""
+            lang_tag = language or ""
 
             chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
             all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-    
+
     full_output_parts = []
 
-    if config.get('export_structure', True):
+    if config.get("export_structure", True):
         structure = generate_project_structure(input_dir, processed_paths)
         full_output_parts.append(structure)
 
-    if config.get('export_content', True):
+    if config.get("export_content", True):
         if full_output_parts:  # Add separator if structure is present
             full_output_parts.append("\n")
         full_output_parts.append("# BEGIN FILE CONTENTS\n\n")

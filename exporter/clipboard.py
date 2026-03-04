@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 import sys
-from typing import List
 
 
 def copy_to_clipboard(text: str) -> bool:
@@ -16,10 +15,12 @@ def copy_to_clipboard(text: str) -> bool:
 
     Returns:
         True on success, False otherwise.
+
     """
     # Try pyperclip first
     try:
         import pyperclip
+
         pyperclip.copy(text)
         return True
     except ImportError:
@@ -39,10 +40,8 @@ def copy_to_clipboard(text: str) -> bool:
         # Linux
         for cmd in ("xclip", "xsel"):
             if shutil.which(cmd):
-                args: List[str] = (
-                    ["xclip", "-selection", "clipboard"]
-                    if cmd == "xclip"
-                    else ["xsel", "--clipboard", "--input"]
+                args: list[str] = (
+                    ["xclip", "-selection", "clipboard"] if cmd == "xclip" else ["xsel", "--clipboard", "--input"]
                 )
                 p = subprocess.Popen(args, stdin=subprocess.PIPE, text=True)
                 p.communicate(text)

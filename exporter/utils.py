@@ -1,14 +1,14 @@
 import os
 import tkinter as tk
 from tkinter import filedialog
-from typing import Dict, List, Optional
 
 
-def select_directory() -> Optional[str]:
+def select_directory() -> str | None:
     """Open a GUI dialog to select a project directory.
 
     Returns:
         The selected directory path or None if no selection was made.
+
     """
     root = tk.Tk()
     root.withdraw()
@@ -26,6 +26,7 @@ def get_next_filename(base_name: str) -> str:
 
     Returns:
         A unique filename.
+
     """
     if not os.path.exists(base_name):
         return base_name
@@ -38,7 +39,7 @@ def get_next_filename(base_name: str) -> str:
 
 
 def print_statistics(
-    files_by_dir: Dict[str, List[str]],
+    files_by_dir: dict[str, list[str]],
     total_chars: int,
     elapsed_time: float,
     output_file: str,
@@ -54,6 +55,7 @@ def print_statistics(
         output_file: Path to the output file.
         create_file: Whether a file was created.
         copy_to_buffer: Whether content was copied to clipboard.
+
     """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())

@@ -1,14 +1,13 @@
 import os
-from typing import Optional, Set
 
 
 def is_code_file(
     file_path: str,
-    blacklist_extensions: Set[str],
-    blacklist_dirs: Set[str],
-    blacklist_filenames: Set[str],
+    blacklist_extensions: set[str],
+    blacklist_dirs: set[str],
+    blacklist_filenames: set[str],
     filename_filter_mode: str,
-    max_size: Optional[int] = None,
+    max_size: int | None = None,
 ) -> bool:
     """Determine if a file should be included in the export based on filters.
 
@@ -22,6 +21,7 @@ def is_code_file(
 
     Returns:
         True if the file should be included, False otherwise.
+
     """
     filename = os.path.basename(file_path)
 
