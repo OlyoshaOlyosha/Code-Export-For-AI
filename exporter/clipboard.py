@@ -1,10 +1,121 @@
+"""Cross-platform clipboard operations module."""
+
+import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
+
+# Attempt to import pyperclip at top level
+try:
+    import pyperclip
+
+    HAS_PYPERCLIP = True
+except ImportError:
+    HAS_PYPERCLIP = False
+
+
+def _get_full_command(cmd: str) -> list[str] | None:
+    """
+    Return full path to the command as a list of arguments.
+
+    Returns None if command not found.
+    Special handling for Windows clip command.
+    """
+    if sys.platform == "win32" and cmd == "clip":
+        system_root = os.environ.get("SYSTEMROOT", "C:\\Windows")
+        clip_path = Path(system_root) / "System32" / "clip.exe"
+        if clip_path.exists():
+            return [str(clip_path)]
+        return None
+
+    full_path = shutil.which(cmd)
+    return [full_path] if full_path else None
+
+
+def _copy_with_pyperclip(text: str) -> bool | None:
+    """Try to copy using pyperclip. Return True on success, False on failure, None if not available."""
+    if not HAS_PYPERCLIP:
+        return None
+    try:
+        pyperclip.copy(text)
+    except Exception as e:  # noqa: BLE001
+        # Pyperclip can raise various exceptions; we just log and fall back.
+        print(f"Pyperclip error: {e}")
+        return False
+    else:
+        return True
+
+
+def _copy_windows(text: str) -> bool:
+    """Copy using Windows clip command."""
+    cmd_list = _get_full_command("clip")
+    if cmd_list is None:
+        return False
+    try:
+        # Text is trusted (file content), passed via stdin, not shell
+        subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Windows clipboard error: {e}")
+        return False
+    else:
+        return True
+
+
+def _copy_macos(text: str) -> bool:
+    """Copy using macOS pbcopy command."""
+    cmd_list = _get_full_command("pbcopy")
+    if cmd_list is None:
+        return False
+    try:
+        subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"macOS clipboard error: {e}")
+        return False
+    else:
+        return True
+
+
+def _copy_linux(text: str) -> bool:
+    """Copy using Linux xclip or xsel commands."""
+    for cmd in ("xclip", "xsel"):
+        cmd_list = _get_full_command(cmd)
+        if cmd_list is None:
+            continue
+
+        if cmd == "xclip":
+            cmd_list.extend(["-selection", "clipboard"])
+        else:  # xsel
+            cmd_list.extend(["--clipboard", "--input"])
+
+        try:
+            subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
+        except subprocess.SubprocessError:
+            continue
+        else:
+            return True
+
+    return False
+
+
+def _copy_with_native(text: str) -> bool:
+    """Try to copy using native system tools based on platform."""
+    platform = sys.platform
+    try:
+        if platform == "win32":
+            return _copy_windows(text)
+        if platform == "darwin":
+            return _copy_macos(text)
+        # Linux and others
+        return _copy_linux(text)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Native clipboard error: {e}")
+        return False
 
 
 def copy_to_clipboard(text: str) -> bool:
-    """Copy text to clipboard in a cross-platform way.
+    """
+    Copy text to clipboard in a cross-platform way.
 
     Order of attempts:
     1. pyperclip (if installed)
@@ -17,37 +128,10 @@ def copy_to_clipboard(text: str) -> bool:
         True on success, False otherwise.
 
     """
-    # Try pyperclip first
-    try:
-        import pyperclip
+    # 1. pyperclip
+    pyperclip_result = _copy_with_pyperclip(text)
+    if pyperclip_result is not None:
+        return pyperclip_result
 
-        pyperclip.copy(text)
-        return True
-    except ImportError:
-        pass
-
-    # Fallback to native tools
-    try:
-        if sys.platform == "win32":
-            subprocess.run(["clip"], input=text, text=True, check=True)
-            return True
-
-        if sys.platform == "darwin":
-            p = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE, text=True)
-            p.communicate(text)
-            return p.returncode == 0
-
-        # Linux
-        for cmd in ("xclip", "xsel"):
-            if shutil.which(cmd):
-                args: list[str] = (
-                    ["xclip", "-selection", "clipboard"] if cmd == "xclip" else ["xsel", "--clipboard", "--input"]
-                )
-                p = subprocess.Popen(args, stdin=subprocess.PIPE, text=True)
-                p.communicate(text)
-                return p.returncode == 0
-
-    except Exception as e:
-        print(f"Clipboard copy error: {e}")
-
-    return False
+    # 2. Native tools
+    return _copy_with_native(text)
