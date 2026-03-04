@@ -1,5 +1,6 @@
 """
-User configuration for Code Export For AI
+User configuration for Code Export For AI.
+
 Edit this file to customize filtering and behavior.
 """
 
