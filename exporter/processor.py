@@ -1,5 +1,12 @@
+"""Project file processing and export module.
+
+Contains core logic: reading files, language detection for syntax highlighting,
+project structure generation, and final output formatting.
+"""
+
 import os
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from exporter.clipboard import copy_to_clipboard
@@ -72,15 +79,15 @@ def read_file_content(file_path: str) -> str | None:
         The file content as a string, or None if reading failed.
 
     """
+    path = Path(file_path)
     encodings = ["utf-8", "cp1251", "latin-1"]
 
     for encoding in encodings:
         try:
-            with open(file_path, encoding=encoding) as f:
-                return f.read()
+            return path.read_text(encoding=encoding)
         except UnicodeDecodeError:
             continue
-        except Exception as e:
+        except OSError as e:
             print(f"Error reading {file_path}: {e}")
             return None
 
@@ -88,7 +95,7 @@ def read_file_content(file_path: str) -> str | None:
     return None
 
 
-def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str:
+def generate_project_structure(_input_dir: str, processed_paths: set[str]) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
     Args:
@@ -141,46 +148,20 @@ def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str
 
 
 def detect_language(file_path: str, content: str, config: dict[str, Any]) -> str:
-    """Detect language tag for syntax highlighting.
-
-    Args:
-        file_path: Path to the file.
-        content: Content of the file.
-        config: Configuration dictionary.
-
-    Returns:
-        The language tag for syntax highlighting, or empty string if not detected.
-
-    """
-    use_pygments = config.get("use_pygments", True)
-
-    if use_pygments:
-        try:
-            from pygments.lexers import guess_lexer_for_filename
-
-            lexer = guess_lexer_for_filename(file_path, content)
-            if aliases := getattr(lexer, "aliases", None):
-                return aliases[0]
-        except Exception:
-            pass  # Fall through to fallback map
-
-    # Fallback to hardcoded extension map
-    _, ext = os.path.splitext(file_path)
-    if ext:
-        key = ext.lower().lstrip(".")
-        return EXTENSION_LANGUAGE_MAP.get(key, "")
-
-    return ""
+    """Detect language tag for syntax highlighting based on file extension."""
+    ext = Path(file_path).suffix.lower().lstrip(".")
+    return EXTENSION_LANGUAGE_MAP.get(ext, "")
 
 
 def export_project(
     input_dir: str,
     output_file: str,
     config: dict[str, Any],
+    *,
     create_file: bool = True,
     copy_to_buffer: bool = False,
 ) -> tuple[dict[str, list[str]], int]:
-    """Main export function: scan, filter, read, format and output project files.
+    """Export project: scan, filter, read, format and output project files.
 
     Args:
         input_dir: Path to the input directory.
@@ -202,7 +183,7 @@ def export_project(
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
 
         for filename in files:
-            file_path = os.path.join(root, filename)
+            file_path = str(Path(root) / filename)
 
             if not is_code_file(
                 file_path,
@@ -219,8 +200,8 @@ def export_project(
                 continue
 
             rel_path = os.path.relpath(file_path, input_dir)
-            rel_dir = os.path.dirname(rel_path) or "."
-            files_by_dir[rel_dir].append(os.path.basename(filename))
+            rel_dir = str(Path(rel_path).parent) or "."
+            files_by_dir[rel_dir].append(Path(filename).name)
             processed_paths.add(rel_path)
 
             language = detect_language(file_path, content, config)
@@ -246,8 +227,7 @@ def export_project(
     full_output = "".join(full_output_parts)
 
     if create_file:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(full_output)
+        Path(output_file).write_text(full_output, encoding="utf-8")
 
     if copy_to_buffer and copy_to_clipboard(full_output):
         print("Content copied to clipboard")

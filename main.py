@@ -162,7 +162,9 @@ def perform_export(
 
     start_time = time.time()
 
-    files_by_dir, total_chars = export_project(input_dir, output_file, config, create_file, copy_to_buffer)
+    files_by_dir, total_chars = export_project(
+        input_dir, output_file, config, create_file=create_file, copy_to_buffer=copy_to_buffer
+    )
 
     elapsed_time = time.time() - start_time
     print_statistics(files_by_dir, total_chars, elapsed_time, output_file, create_file, copy_to_buffer)
