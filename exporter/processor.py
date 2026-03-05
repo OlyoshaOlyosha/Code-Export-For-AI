@@ -143,11 +143,11 @@ def generate_project_structure(_input_dir: str, processed_paths: set[str]) -> st
 
     lines = ["# Project Directory Structure:", ".", ""]
     lines.extend(render_node(root))
-    lines.append("")  # empty line after tree
+    lines.append("")
     return "\n".join(lines)
 
 
-def detect_language(file_path: str, content: str, config: dict[str, Any]) -> str:
+def detect_language(file_path: str) -> str:
     """Detect language tag for syntax highlighting based on file extension."""
     ext = Path(file_path).suffix.lower().lstrip(".")
     return EXTENSION_LANGUAGE_MAP.get(ext, "")
@@ -185,14 +185,7 @@ def export_project(
         for filename in files:
             file_path = str(Path(root) / filename)
 
-            if not is_code_file(
-                file_path,
-                config["blacklist_extensions"],
-                config["blacklist_dirs"],
-                config["blacklist_filenames"],
-                config["filename_filter_mode"],
-                config["max_size"],
-            ):
+            if not is_code_file(file_path, config):
                 continue
 
             content = read_file_content(file_path)
@@ -204,7 +197,7 @@ def export_project(
             files_by_dir[rel_dir].append(Path(filename).name)
             processed_paths.add(rel_path)
 
-            language = detect_language(file_path, content, config)
+            language = detect_language(file_path)
             lang_tag = language or ""
 
             chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
