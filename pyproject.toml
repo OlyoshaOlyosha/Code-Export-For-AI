@@ -20,7 +20,7 @@ ignore = [
     "ERA001",  # Commented-out code
     "COM812",  # Trailing comma (conflict with formatter)
     "ANN204",  # Missing return type for special methods (__init__)
-    
+    "PERF203", # try-except in loop - acceptable for file operations, would complicate code
 ]
 
 [tool.ruff.lint.per-file-ignores]
