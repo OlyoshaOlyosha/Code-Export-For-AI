@@ -21,6 +21,7 @@ ignore = [
     "COM812",  # Trailing comma (conflict with formatter)
     "ANN204",  # Missing return type for special methods (__init__)
     "PERF203", # try-except in loop - acceptable for file operations, would complicate code
+    "FBT003",  # Boolean positional value in function call - Tkinter APIs require boolean literals
 ]
 
 [tool.ruff.lint.per-file-ignores]
