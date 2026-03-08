@@ -220,7 +220,9 @@ def export_project(
     full_output = "".join(full_output_parts)
 
     if create_file:
-        Path(output_file).write_text(full_output, encoding="utf-8")
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(full_output, encoding="utf-8")
 
     if copy_to_buffer and copy_to_clipboard(full_output):
         print("Content copied to clipboard")
