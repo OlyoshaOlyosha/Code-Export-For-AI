@@ -127,30 +127,55 @@ def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def setup_args_and_directory(config_dict: dict[str, Any]) -> tuple[str, str]:
-    """Set up command line arguments and select input directory."""
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments once."""
     parser = argparse.ArgumentParser(description="Export code project to a single file for AI review")
     parser.add_argument("-o", "--output", help="Output file name")
     parser.add_argument("-d", "--directory", help="Path to the project directory")
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    # Select input directory
-    if args.directory:
-        if not Path(args.directory).is_dir():
-            print("The specified directory does not exist!")
-            return "", ""
-        input_dir = args.directory
-    else:
-        print("Select the project folder...")
-        input_dir = select_directory()
-        if not input_dir:
-            print("No folder selected!")
-            return "", ""
 
-    # Determine output file
-    output_file = args.output or get_next_filename(config_dict["default_output"])
+def get_input_directory(args: argparse.Namespace, *, use_args: bool = True) -> str | None:
+    """
+    Determine input directory based on command line arguments or user interaction.
 
-    return input_dir, output_file
+    Args:
+        args: Parsed command line arguments.
+        use_args: If True and args.directory is provided, use it; otherwise ask user.
+
+    Returns:
+        Selected directory path or None if cancelled/invalid.
+
+    """
+    if use_args and args.directory:
+        if Path(args.directory).is_dir():
+            return args.directory
+        print("The specified directory does not exist!")
+        return None
+
+    print("Select the project folder...")
+    dir_path = select_directory()
+    if not dir_path:
+        print("No folder selected!")
+    return dir_path
+
+
+def get_output_filename(args: argparse.Namespace, default_output: str, *, use_args: bool = True) -> str:
+    """
+    Determine output filename based on command line arguments or generate unique name.
+
+    Args:
+        args: Parsed command line arguments.
+        default_output: Base output filename from config.
+        use_args: If True and args.output is provided, use it; otherwise generate unique name.
+
+    Returns:
+        Output file path.
+
+    """
+    if use_args and args.output:
+        return args.output
+    return get_next_filename(default_output)
 
 
 def perform_export(
@@ -175,8 +200,6 @@ def perform_export(
     output_info = OutputInfo(output_file, create_file, copy_to_buffer)
     print_statistics(files_by_dir, total_chars, elapsed_time, output_info)
 
-    input("\nPress Enter to exit...")
-
 
 def main() -> None:
     __version__ = "1.1.0"
@@ -184,19 +207,38 @@ def main() -> None:
 
     print(f"{__app_name__} v{__version__}")
 
-    config = load_config()
-    config = check_export_options(config)
-    if not config:
-        return
+    args = parse_arguments()  # Parse command line arguments once
+    first_run = True
 
-    create_file = config["create_file"]
-    copy_to_buffer = config["copy_to_buffer"]
+    while True:
+        # Reload config on each iteration to pick up external changes
+        config_dict = load_config()
+        config_dict = check_export_options(config_dict)
+        if not config_dict:
+            return
 
-    input_dir, output_file = setup_args_and_directory(config)
-    if not input_dir:
-        return
+        create_file = config_dict["create_file"]
+        copy_to_buffer = config_dict["copy_to_buffer"]
 
-    perform_export(input_dir, output_file, config, create_file=create_file, copy_to_buffer=copy_to_buffer)
+        # Get input directory (use command line arg only on first run)
+        input_dir = get_input_directory(args, use_args=first_run)
+        if not input_dir:
+            return
+
+        # Get output filename (use command line arg only on first run)
+        output_file = get_output_filename(args, config_dict["default_output"], use_args=first_run)
+
+        perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
+
+        # After first run, subsequent iterations will ignore command line arguments
+        first_run = False
+
+        # Ask user whether to exit or start a new export
+        print("\n" + "=" * 50)
+        choice = input("Press Enter to exit, or type 'r' to restart: ").strip().lower()
+        if choice != "r":
+            break
+        print()  # empty line for better readability
 
 
 if __name__ == "__main__":
