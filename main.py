@@ -101,15 +101,15 @@ def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
 
         if response == "" or response.startswith("y"):
             try:
-                with Path("config.py").open(encoding="utf-8") as f:
-                    lines = f.readlines()
-
-                with Path("config.py").open("w", encoding="utf-8") as f:
-                    for line in lines:
-                        if line.strip().startswith("EXPORT_CONTENT"):
-                            f.write("EXPORT_CONTENT = True    # Include file contents (code) in output\n")
-                        else:
-                            f.write(line)
+                config_path = Path("config.py")
+                lines = config_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                new_lines = []
+                for line in lines:
+                    if line.strip().startswith("EXPORT_CONTENT"):
+                        new_lines.append("EXPORT_CONTENT = True    # Include file contents (code) in output\n")
+                    else:
+                        new_lines.append(line)
+                config_path.write_text("".join(new_lines), encoding="utf-8")
 
                 print("Updated config.py: EXPORT_CONTENT set to True permanently.")
                 config["export_content"] = True
@@ -154,7 +154,12 @@ def setup_args_and_directory(config_dict: dict[str, Any]) -> tuple[str, str]:
 
 
 def perform_export(
-    input_dir: str, output_file: str, config: dict[str, Any], *, create_file: bool, copy_to_buffer: bool
+    input_dir: str,
+    output_file: str,
+    config: dict[str, Any],
+    *,
+    create_file: bool,
+    copy_to_buffer: bool,
 ) -> None:
     """Perform the export and print statistics."""
     print(f"Directory: {input_dir}")
