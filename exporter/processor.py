@@ -95,7 +95,7 @@ def read_file_content(file_path: str) -> str | None:
     return None
 
 
-def generate_project_structure(_input_dir: str, processed_paths: set[str]) -> str:
+def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
     Args:
@@ -141,9 +141,9 @@ def generate_project_structure(_input_dir: str, processed_paths: set[str]) -> st
 
         return lines
 
-    lines = ["# Project Directory Structure:", ".", ""]
+    root_name = Path(input_dir).name + "/"
+    lines = ["# Project Directory Structure:", root_name]
     lines.extend(render_node(root))
-    lines.append("")
     return "\n".join(lines)
 
 
