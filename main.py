@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from exporter.processor import export_project
-from exporter.utils import get_next_filename, print_statistics, select_directory
+from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
 try:
     import config
@@ -167,7 +167,8 @@ def perform_export(
     )
 
     elapsed_time = time.time() - start_time
-    print_statistics(files_by_dir, total_chars, elapsed_time, output_file, create_file, copy_to_buffer)
+    output_info = OutputInfo(output_file, create_file, copy_to_buffer)
+    print_statistics(files_by_dir, total_chars, elapsed_time, output_info)
 
     input("\nPress Enter to exit...")
 

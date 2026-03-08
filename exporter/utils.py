@@ -1,5 +1,12 @@
-import os
+"""Utility functions for project export.
+
+This module provides helper functions for directory selection, filename generation,
+and statistics printing.
+"""
+
 import tkinter as tk
+from dataclasses import dataclass
+from pathlib import Path
 from tkinter import filedialog
 
 
@@ -28,23 +35,35 @@ def get_next_filename(base_name: str) -> str:
         A unique filename.
 
     """
-    if not os.path.exists(base_name):
+    path = Path(base_name)
+    if not path.exists():
         return base_name
 
-    name, ext = os.path.splitext(base_name)
+    parent = path.parent
+    stem = path.stem
+    suffix = path.suffix
     counter = 1
-    while os.path.exists(f"{name}_{counter}{ext}"):
+    while True:
+        new_name = parent / f"{stem}_{counter}{suffix}"
+        if not new_name.exists():
+            return str(new_name)
         counter += 1
-    return f"{name}_{counter}{ext}"
+
+
+@dataclass
+class OutputInfo:
+    """Information about output destination and actions."""
+
+    output_file: str
+    create_file: bool
+    copy_to_buffer: bool
 
 
 def print_statistics(
     files_by_dir: dict[str, list[str]],
     total_chars: int,
     elapsed_time: float,
-    output_file: str,
-    create_file: bool,
-    copy_to_buffer: bool,
+    output_info: OutputInfo,
 ) -> None:
     """Print formatted statistics after export.
 
@@ -52,9 +71,7 @@ def print_statistics(
         files_by_dir: Dictionary mapping directories to lists of files.
         total_chars: Total number of characters in the exported content.
         elapsed_time: Time taken for the export process.
-        output_file: Path to the output file.
-        create_file: Whether a file was created.
-        copy_to_buffer: Whether content was copied to clipboard.
+        output_info: OutputInfo object containing output file and flags.
 
     """
     num_dirs = len(files_by_dir)
@@ -72,9 +89,10 @@ def print_statistics(
         print(f"  {dir_path}: {len(files)} - {', '.join(files)}")
 
     result_parts = []
-    if create_file:
-        result_parts.append(f"saved to {output_file}")
-    if copy_to_buffer:
+    if output_info.create_file:
+        result_parts.append(f"saved to {output_info.output_file}")
+    if output_info.copy_to_buffer:
         result_parts.append("copied to clipboard")
 
+    print(f"\nDone! Result: {' and '.join(result_parts)}")
     print(f"\nDone! Result: {' and '.join(result_parts)}")
