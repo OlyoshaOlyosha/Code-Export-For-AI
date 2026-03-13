@@ -40,6 +40,7 @@ def get_default_config() -> dict[str, Any]:
         "include_empty_files": False,
         "export_structure": True,
         "export_content": True,
+        "max_clipboard_chars": 0,
     }
 
 
@@ -75,6 +76,7 @@ def load_config() -> dict[str, Any]:
             "include_empty_files": getattr(config, "INCLUDE_EMPTY_FILES", False),
             "export_structure": getattr(config, "EXPORT_STRUCTURE", True),
             "export_content": getattr(config, "EXPORT_CONTENT", True),
+            "max_clipboard_chars": getattr(config, "MAX_CLIPBOARD_CHARS", 0),
         }
     except AttributeError as e:
         print(f"WARNING: Missing setting in config.py: {e}")
@@ -223,7 +225,6 @@ def main() -> None:
 
     args = parse_arguments()  # Parse command line arguments once
     first_run = True
-    saved_output_dir: str | None = None  # Store selected output directory across restarts
 
     while True:
         # Reload config on each iteration to pick up external changes

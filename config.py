@@ -57,3 +57,6 @@ INCLUDE_EMPTY_FILES = False
 # Export options
 EXPORT_STRUCTURE = True  # Include project directory tree in output
 EXPORT_CONTENT = True    # Include file contents (code) in output
+
+# Clipboard safety
+MAX_CLIPBOARD_CHARS = 10000  # Maximum characters to copy to clipboard (0 to disable)

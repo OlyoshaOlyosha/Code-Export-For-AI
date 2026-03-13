@@ -153,6 +153,76 @@ def detect_language(file_path: str) -> str:
     return EXTENSION_LANGUAGE_MAP.get(ext, "")
 
 
+def build_full_output(
+    input_dir: str,
+    processed_paths: set[str],
+    all_content: list[str],
+    config: dict[str, Any],
+) -> str:
+    """Build the complete output: project structure (if enabled) and file contents.
+
+    Args:
+        input_dir: Path to the project root directory.
+        processed_paths: Set of relative paths of processed files.
+        all_content: List of strings with file contents (formatted with syntax highlighting).
+        config: Configuration dictionary.
+
+    Returns:
+        The complete output string to be written or copied.
+
+    """
+    parts: list[str] = []
+
+    if config.get("export_structure", True):
+        structure = generate_project_structure(input_dir, processed_paths)
+        parts.append(structure)
+
+    if config.get("export_content", True):
+        if parts:  # Add a separator if structure is present
+            parts.append("\n")
+        parts.append("# BEGIN FILE CONTENTS\n\n")
+        parts.append("".join(all_content))
+
+    return "".join(parts)
+
+
+def handle_clipboard_copy(
+    full_output: str,
+    total_chars: int,
+    *,
+    copy_to_buffer: bool,
+    config: dict[str, Any],
+) -> bool:
+    """Handle clipboard copying with character limit enforcement.
+
+    Args:
+        full_output: Text to be copied.
+        total_chars: Number of characters in the text.
+        copy_to_buffer: Flag indicating whether copying is requested.
+        config: Configuration dictionary.
+
+    Returns:
+        True if copying was performed (or not needed), False if skipped due to limit or failure.
+
+    """
+    if not copy_to_buffer:
+        return False
+
+    max_chars = config.get("max_clipboard_chars", 0)
+    if max_chars > 0 and total_chars > max_chars:
+        print(
+            f"WARNING: Clipboard copy skipped — output size ({total_chars} chars) exceeds "
+            f"MAX_CLIPBOARD_CHARS={max_chars}.\n"
+            "To disable this limit, set MAX_CLIPBOARD_CHARS = 0 in config.py"
+        )
+        return False
+
+    if copy_to_clipboard(full_output):
+        print("Content copied to clipboard")
+        return True
+    return False
+
+
 def export_project(
     input_dir: str,
     output_file: str,
@@ -161,7 +231,7 @@ def export_project(
     create_file: bool = True,
     copy_to_buffer: bool = False,
 ) -> tuple[dict[str, list[str]], int]:
-    """Export project: scan, filter, read, format and output project files.
+    """Export project: scan, filter, read, and produce output.
 
     Args:
         input_dir: Path to the input directory.
@@ -176,7 +246,7 @@ def export_project(
     """
     files_by_dir = defaultdict(list)
     all_content: list[str] = []
-    processed_paths = set()
+    processed_paths: set[str] = set()
 
     for root, dirs, files in os.walk(input_dir):
         # In-place filter directories
@@ -204,27 +274,12 @@ def export_project(
             all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-
-    full_output_parts = []
-
-    if config.get("export_structure", True):
-        structure = generate_project_structure(input_dir, processed_paths)
-        full_output_parts.append(structure)
-
-    if config.get("export_content", True):
-        if full_output_parts:  # Add separator if structure is present
-            full_output_parts.append("\n")
-        full_output_parts.append("# BEGIN FILE CONTENTS\n\n")
-        full_output_parts.append("".join(all_content))
-
-    full_output = "".join(full_output_parts)
+    full_output = build_full_output(input_dir, processed_paths, all_content, config)
 
     if create_file:
         output_path = Path(output_file)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(full_output, encoding="utf-8")
 
-    if copy_to_buffer and copy_to_clipboard(full_output):
-        print("Content copied to clipboard")
-
+    handle_clipboard_copy(full_output, total_chars, copy_to_buffer=copy_to_buffer, config=config)
     return files_by_dir, total_chars
