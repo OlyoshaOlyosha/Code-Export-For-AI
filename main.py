@@ -64,6 +64,7 @@ def load_config() -> dict[str, Any]:
             "blacklist_dirs": getattr(config, "BLACKLIST_DIRS", set()),
             "blacklist_filenames": getattr(config, "BLACKLIST_FILENAMES", set()),
             "filename_filter_mode": getattr(config, "FILENAME_FILTER_MODE", "exact"),
+            "output_dir": getattr(config, "OUTPUT_DIR", "outputs"),
             "default_output": getattr(config, "OUTPUT_FILENAME", "output.txt"),
             "output_format": getattr(config, "OUTPUT_FORMAT", "txt"),
             "max_size": getattr(config, "MAX_FILE_SIZE_MB", 1) * 1024 * 1024,
@@ -160,22 +161,35 @@ def get_input_directory(args: argparse.Namespace, *, use_args: bool = True) -> s
     return dir_path
 
 
-def get_output_filename(args: argparse.Namespace, default_output: str, *, use_args: bool = True) -> str:
+def get_output_filename(
+    args: argparse.Namespace,
+    config: dict[str, Any],
+) -> str:
     """
-    Determine output filename based on command line arguments or generate unique name.
+    Determine output filename based on command line arguments and config.
 
     Args:
         args: Parsed command line arguments.
-        default_output: Base output filename from config.
-        use_args: If True and args.output is provided, use it; otherwise generate unique name.
+        config: Configuration dictionary.
 
     Returns:
-        Output file path.
+        Output file path as string.
 
     """
-    if use_args and args.output:
-        return args.output
-    return get_next_filename(default_output)
+    if args.output:
+        # Use provided path, possibly prepend output_dir if relative
+        path = Path(args.output)
+        if not path.is_absolute():
+            # Relative path: prepend output_dir from config
+            base_dir = Path(config["output_dir"])
+            path = base_dir / path
+        return str(path)
+
+    # No command line output specified: use OUTPUT_DIR / default_output
+    base_dir = Path(config["output_dir"])
+    candidate = base_dir / config["default_output"]
+    # Ensure uniqueness
+    return get_next_filename(str(candidate))
 
 
 def perform_export(
@@ -209,6 +223,7 @@ def main() -> None:
 
     args = parse_arguments()  # Parse command line arguments once
     first_run = True
+    saved_output_dir: str | None = None  # Store selected output directory across restarts
 
     while True:
         # Reload config on each iteration to pick up external changes
@@ -225,8 +240,8 @@ def main() -> None:
         if not input_dir:
             return
 
-        # Get output filename (use command line arg only on first run)
-        output_file = get_output_filename(args, config_dict["default_output"], use_args=first_run)
+        # Get output filename based on command line arguments and config
+        output_file = get_output_filename(args, config_dict)
 
         perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
 
