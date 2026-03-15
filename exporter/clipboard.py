@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from exporter.console import error
+
 # Attempt to import pyperclip at top level
 try:
     import pyperclip
@@ -41,7 +43,7 @@ def _copy_with_pyperclip(text: str) -> bool | None:
         pyperclip.copy(text)
     except Exception as e:  # noqa: BLE001
         # Pyperclip can raise various exceptions; we just log and fall back.
-        print(f"Pyperclip error: {e}")
+        error(f"Pyperclip error: {e}")
         return False
     else:
         return True
@@ -56,7 +58,7 @@ def _copy_windows(text: str) -> bool:
         # Text is trusted (file content), passed via stdin, not shell
         subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"Windows clipboard error: {e}")
+        error(f"Windows clipboard error: {e}")
         return False
     else:
         return True
@@ -70,7 +72,7 @@ def _copy_macos(text: str) -> bool:
     try:
         subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"macOS clipboard error: {e}")
+        error(f"macOS clipboard error: {e}")
         return False
     else:
         return True
@@ -109,7 +111,7 @@ def _copy_with_native(text: str) -> bool:
         # Linux and others
         return _copy_linux(text)
     except (OSError, subprocess.SubprocessError) as e:
-        print(f"Native clipboard error: {e}")
+        error(f"Native clipboard error: {e}")
         return False
 
 

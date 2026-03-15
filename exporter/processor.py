@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from exporter.clipboard import copy_to_clipboard
+from exporter.console import error, success, warning
 from exporter.scanner import is_code_file
 
 # Default mapping from file extension to language tag for code fences
@@ -88,10 +89,10 @@ def read_file_content(file_path: str) -> str | None:
         except UnicodeDecodeError:
             continue
         except OSError as e:
-            print(f"Error reading {file_path}: {e}")
+            error(f"Error reading {file_path}: {e}")
             return None
 
-    print(f"Failed to read file (all encodings failed): {file_path}")
+    error(f"Failed to read file (all encodings failed): {file_path}")
     return None
 
 
@@ -210,7 +211,7 @@ def handle_clipboard_copy(
 
     max_chars = config.get("max_clipboard_chars", 0)
     if max_chars > 0 and total_chars > max_chars:
-        print(
+        warning(
             f"WARNING: Clipboard copy skipped — output size ({total_chars} chars) exceeds "
             f"MAX_CLIPBOARD_CHARS={max_chars}.\n"
             "To disable this limit, set MAX_CLIPBOARD_CHARS = 0 in config.py"
@@ -218,7 +219,7 @@ def handle_clipboard_copy(
         return False
 
     if copy_to_clipboard(full_output):
-        print("Content copied to clipboard")
+        success("Content copied to clipboard")
         return True
     return False
 

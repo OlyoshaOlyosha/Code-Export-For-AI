@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog
 
+from exporter.console import info, success
+
 
 def select_directory() -> str | None:
     """Open a GUI dialog to select a project directory.
@@ -77,16 +79,16 @@ def print_statistics(
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
 
-    print("\n=== STATISTICS ===")
-    print(f"Elapsed time: {elapsed_time:.2f} sec")
-    print(f"Characters: {total_chars:,} ({total_chars / 1024:.1f} KB)")
-    print(f"Directories: {num_dirs}")
-    print(f"Files: {num_files}")
+    info("\n=== STATISTICS ===")
+    info(f"Elapsed time: {elapsed_time:.2f} sec")
+    info(f"Characters: {total_chars:,} ({total_chars / 1024:.1f} KB)")
+    info(f"Directories: {num_dirs}")
+    info(f"Files: {num_files}")
 
-    print("\nFiles by directory:")
+    info("\nFiles by directory:")
     for dir_path in sorted(files_by_dir.keys()):
         files = files_by_dir[dir_path]
-        print(f"  {dir_path}: {len(files)} - {', '.join(files)}")
+        info(f"  {dir_path}: {len(files)} - {', '.join(files)}")
 
     result_parts = []
     if output_info.create_file:
@@ -94,5 +96,4 @@ def print_statistics(
     if output_info.copy_to_buffer:
         result_parts.append("copied to clipboard")
 
-    print(f"\nDone! Result: {' and '.join(result_parts)}")
-    print(f"\nDone! Result: {' and '.join(result_parts)}")
+    success(f"\nDone! Result: {' and '.join(result_parts)}")

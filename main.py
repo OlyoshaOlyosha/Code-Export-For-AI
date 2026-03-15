@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from exporter.console import error, header, info, prompt, success, warning
 from exporter.processor import export_project
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
@@ -52,14 +53,14 @@ def load_config() -> dict[str, Any]:
 
     """
     if config is None:
-        print("ERROR: config.py not found!")
-        print("Please copy config.py from the repository: https://github.com/OlyoshaOlyosha/Code-Export-For-AI")
-        print("The tool requires proper configuration to filter out binaries, vendor folders, etc.")
-        print("Running with empty filters — this may include unwanted files and make output huge.")
+        error("ERROR: config.py not found!")
+        info("Please copy config.py from the repository: https://github.com/OlyoshaOlyosha/Code-Export-For-AI")
+        info("The tool requires proper configuration to filter out binaries, vendor folders, etc.")
+        warning("Running with empty filters — this may include unwanted files and make output huge.")
         return get_default_config()
 
     try:
-        print("Configuration loaded from config.py")
+        info("Configuration loaded from config.py")
         return {
             "blacklist_extensions": getattr(config, "BLACKLIST_EXTENSIONS", set()),
             "blacklist_dirs": getattr(config, "BLACKLIST_DIRS", set()),
@@ -79,8 +80,8 @@ def load_config() -> dict[str, Any]:
             "max_clipboard_chars": getattr(config, "MAX_CLIPBOARD_CHARS", 0),
         }
     except AttributeError as e:
-        print(f"WARNING: Missing setting in config.py: {e}")
-        print("Using safe fallback values.")
+        warning(f"WARNING: Missing setting in config.py: {e}")
+        info("Using safe fallback values.")
         return get_default_config()
 
 
@@ -91,16 +92,18 @@ def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
 
     if not create_file and not copy_to_buffer:
         create_file = True
-        print("File output enabled (both outputs were disabled)")
+        info("File output enabled (both outputs were disabled)")
 
-    # Check export options
     if not config.get("export_structure", True) and not config.get("export_content", True):
-        print("WARNING: Both EXPORT_STRUCTURE and EXPORT_CONTENT are disabled in config.py.")
-        print("Nothing will be exported!")
-        print("Do you want to enable code export (EXPORT_CONTENT=True) for this run?")
-        print("Press Enter for Yes, or type n and Enter to exit: ", end="")
-
-        response = input().strip().lower()
+        warning("WARNING: Both EXPORT_STRUCTURE and EXPORT_CONTENT are disabled in config.py.")
+        warning("Nothing will be exported!")
+        response = (
+            prompt(
+                "Do you want to enable code export (EXPORT_CONTENT=True) for this run? (Press Enter for Yes, or type n and Enter to exit): "
+            )
+            .strip()
+            .lower()
+        )
 
         if response == "" or response.startswith("y"):
             try:
@@ -114,17 +117,16 @@ def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
                         new_lines.append(line)
                 config_path.write_text("".join(new_lines), encoding="utf-8")
 
-                print("Updated config.py: EXPORT_CONTENT set to True permanently.")
+                success("Updated config.py: EXPORT_CONTENT set to True permanently.")
                 config["export_content"] = True
-                print("Continuing with code export enabled...\n")
+                info("Continuing with code export enabled...\n")
             except OSError as e:
-                print(f"Failed to update config.py: {e}")
-                print("Enabled only for this run.")
+                error(f"Failed to update config.py: {e}")
+                warning("Enabled only for this run.")
                 config["export_content"] = True
         else:
-            print("Exiting — no content to export.")
+            warning("Exiting — no content to export.")
             return {}
-
     config["create_file"] = create_file
     config["copy_to_buffer"] = copy_to_buffer
     return config
@@ -153,13 +155,13 @@ def get_input_directory(args: argparse.Namespace, *, use_args: bool = True) -> s
     if use_args and args.directory:
         if Path(args.directory).is_dir():
             return args.directory
-        print("The specified directory does not exist!")
+        error("The specified directory does not exist!")
         return None
 
-    print("Select the project folder...")
+    info("Select the project folder...")
     dir_path = select_directory()
     if not dir_path:
-        print("No folder selected!")
+        error("No folder selected!")
     return dir_path
 
 
@@ -203,8 +205,8 @@ def perform_export(
     copy_to_buffer: bool,
 ) -> None:
     """Perform the export and print statistics."""
-    print(f"Directory: {input_dir}")
-    print(f"Output file: {output_file}")
+    info(f"Directory: {input_dir}")
+    info(f"Output file: {output_file}")
 
     start_time = time.time()
 
@@ -221,7 +223,7 @@ def main() -> None:
     __version__ = "1.1.0"
     __app_name__ = "Code Export For AI"
 
-    print(f"{__app_name__} v{__version__}")
+    header(f"{__app_name__} v{__version__}")
 
     args = parse_arguments()  # Parse command line arguments once
     first_run = True
@@ -250,8 +252,8 @@ def main() -> None:
         first_run = False
 
         # Ask user whether to exit or start a new export
-        print("\n" + "=" * 50)
-        choice = input("Press Enter to exit, or type 'r' to restart: ").strip().lower()
+        info("\n" + "=" * 50)
+        choice = prompt("Press Enter to exit, or type 'r' to restart: ").strip().lower()
         if choice != "r":
             break
         print()  # empty line for better readability
