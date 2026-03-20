@@ -96,7 +96,87 @@ def read_file_content(file_path: str) -> str | None:
     return None
 
 
-def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str:
+def _generate_structure_with_empty_dirs(input_dir: str, processed_paths: set[str], config: dict[str, Any]) -> str:
+    """Generate project tree including all directories (even empty) from actual filesystem.
+
+    Directories are filtered according to blacklist_dirs and hidden directories (starting with '.').
+    Only exported files (from processed_paths) are shown as leaves.
+
+    Args:
+        input_dir: Path to the input directory.
+        processed_paths: Set of relative paths of exported files.
+        config: Configuration dictionary with 'blacklist_dirs'.
+
+    Returns:
+        ASCII tree string.
+
+    """
+    root_path = Path(input_dir)
+    blacklist_dirs = config["blacklist_dirs"]
+
+    # Build directory tree by walking filesystem with filtering
+    dir_tree = {}  # root node representing contents of input_dir
+
+    for root, dirs, _ in os.walk(input_dir):
+        # Filter dirs in-place: skip hidden and blacklisted
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in blacklist_dirs]
+
+        rel_root = os.path.relpath(root, input_dir)
+        if rel_root == ".":
+            continue  # root directory itself is represented by dir_tree
+
+        # Ensure all parent directories exist in the tree
+        parts = Path(rel_root).parts
+        current = dir_tree
+        for part in parts:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+
+    # Add files from processed_paths
+    for rel_path in processed_paths:
+        # Normalize separators to '/'
+        norm_parts = rel_path.replace("\\", "/").split("/")
+        filename = norm_parts[-1]
+        dir_parts = norm_parts[:-1]
+
+        current = dir_tree
+        for part in dir_parts:
+            # Directory should exist from walk, but if not (e.g., due to edge cases), create it
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+
+        if "__files__" not in current:
+            current["__files__"] = []
+        current["__files__"].append(filename)
+
+    def render_node(node: dict, prefix: str = "") -> list[str]:
+        lines = []
+        dirs = [k for k in node if k != "__files__"]
+        files = sorted(node.get("__files__", []))
+
+        pointers = ["├── "] * (len(dirs) + len(files) - 1) + (["└── "] if dirs + files else [])
+
+        for i, name in enumerate(sorted(dirs) + files):
+            pointer = pointers[i]
+            is_dir = name in dirs
+            line = f"{prefix}{pointer}{name}/" if is_dir else f"{prefix}{pointer}{name}"
+            lines.append(line)
+
+            if is_dir:
+                extension = "    " if pointer == "└── " else "│   "
+                lines.extend(render_node(node[name], prefix + extension))
+
+        return lines
+
+    root_name = root_path.name + "/"
+    lines = ["# Project Directory Structure:", root_name]
+    lines.extend(render_node(dir_tree))
+    return "\n".join(lines)
+
+
+def generate_project_structure(input_dir: str, processed_paths: set[str], config: dict[str, Any]) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
     Args:
@@ -107,7 +187,10 @@ def generate_project_structure(input_dir: str, processed_paths: set[str]) -> str
         A string representation of the project structure as an ASCII tree.
 
     """
-    # Build tree from relative paths
+    if config.get("show_empty_dirs", False):
+        return _generate_structure_with_empty_dirs(input_dir, processed_paths, config)
+
+    # Original method (without empty dirs)
     root = {}
     for rel_path in sorted(processed_paths):
         parts = rel_path.replace("\\", "/").split("/")  # normalize slashes
@@ -175,7 +258,7 @@ def build_full_output(
     parts: list[str] = []
 
     if config.get("export_structure", True):
-        structure = generate_project_structure(input_dir, processed_paths)
+        structure = generate_project_structure(input_dir, processed_paths, config)
         parts.append(structure)
 
     if config.get("export_content", True):
@@ -263,16 +346,19 @@ def export_project(
             if content is None:
                 continue
 
+            if not config.get("include_empty_files", True) and content == "":
+                continue
+
             rel_path = os.path.relpath(file_path, input_dir)
             rel_dir = str(Path(rel_path).parent) or "."
             files_by_dir[rel_dir].append(Path(filename).name)
             processed_paths.add(rel_path)
 
-            language = detect_language(file_path)
-            lang_tag = language or ""
-
-            chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
-            all_content.append(chunk)
+            if content != "":
+                language = detect_language(file_path)
+                lang_tag = language or ""
+                chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
+                all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
     full_output = build_full_output(input_dir, processed_paths, all_content, config)

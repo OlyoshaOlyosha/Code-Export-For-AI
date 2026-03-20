@@ -44,19 +44,20 @@ FILENAME_FILTER_MODE = "exact"
 OUTPUT_DIR = "outputs"  # Default directory for output files
 OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
 OUTPUT_FORMAT = "txt"  # future: 'md'
-MAX_FILE_SIZE_MB = 1
-
-CREATE_FILE = True
-COPY_TO_CLIPBOARD = True
+MAX_FILE_SIZE_MB = 1  # Max file size to include (in MB)
+CREATE_FILE = True  # Write output to file
+COPY_TO_CLIPBOARD = True  # Copy output to clipboard
 
 # Features
-USE_PYGMENTS = True
-SHOW_PROGRESS = True
-INCLUDE_EMPTY_FILES = False
+USE_PYGMENTS = True  # Enable syntax highlighting
+SHOW_PROGRESS = True  # Show progress during export
 
 # Export options
 EXPORT_STRUCTURE = True  # Include project directory tree in output
-EXPORT_CONTENT = True    # Include file contents (code) in output
+EXPORT_CONTENT = True  # Include file contents (code) in output
+
+SHOW_EMPTY_DIRS = True  # Include empty directories in the structure tree
+INCLUDE_EMPTY_FILES = True  # Include empty files in output (structure only, no empty code blocks)
 
 # Clipboard safety
 MAX_CLIPBOARD_CHARS = 10000  # Maximum characters to copy to clipboard (0 to disable)

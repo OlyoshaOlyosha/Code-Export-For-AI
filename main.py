@@ -41,6 +41,7 @@ def get_default_config() -> dict[str, Any]:
         "include_empty_files": False,
         "export_structure": True,
         "export_content": True,
+        "show_empty_dirs": False,
         "max_clipboard_chars": 0,
     }
 
@@ -77,6 +78,7 @@ def load_config() -> dict[str, Any]:
             "include_empty_files": getattr(config, "INCLUDE_EMPTY_FILES", False),
             "export_structure": getattr(config, "EXPORT_STRUCTURE", True),
             "export_content": getattr(config, "EXPORT_CONTENT", True),
+            "show_empty_dirs": getattr(config, "SHOW_EMPTY_DIRS", False),
             "max_clipboard_chars": getattr(config, "MAX_CLIPBOARD_CHARS", 0),
         }
     except AttributeError as e:
