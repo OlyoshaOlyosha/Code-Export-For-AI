@@ -14,6 +14,12 @@ BLACKLIST_EXTENSIONS = {
     "pyc", "pyo", "pyd", "class",
     "db", "sqlite", "mdb",
     "ini", "cfg", "conf", "config", "env",
+    # Build artifacts and generated files
+    "pyi",            # Type stub files
+    "lock",           # Dependency lock files (poetry.lock, package-lock.json)
+    "map",            # Source maps
+    "min.js", "min.css",  # Minified assets
+    "bundle.js", "chunk.js",  # Bundled JS
 }
 
 # Directories to completely skip
@@ -33,9 +39,20 @@ BLACKLIST_DIRS = {
     "build",
     "target",
     "packages",
+    # Caches and test outputs
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "htmlcov",
+    "coverage",
+    # Temporary directories
+    "tmp",
+    "temp",
+    "logs",
 }
+
 # Filenames to ignore
-BLACKLIST_FILENAMES = {"__init__.py", "setup.py", "requirements.txt"}
+BLACKLIST_FILENAMES = {"setup.py", "requirements.txt"}
 
 # Filename matching mode: 'exact' or 'contains'
 FILENAME_FILTER_MODE = "exact"
@@ -44,7 +61,7 @@ FILENAME_FILTER_MODE = "exact"
 OUTPUT_DIR = "outputs"  # Default directory for output files
 OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
 OUTPUT_FORMAT = "txt"  # future: 'md'
-MAX_FILE_SIZE_MB = 1  # Max file size to include (in MB)
+MAX_FILE_SIZE_MB = 5  # Max file size to include (in MB)
 CREATE_FILE = True  # Write output to file
 COPY_TO_CLIPBOARD = True  # Copy output to clipboard
 
@@ -60,4 +77,4 @@ SHOW_EMPTY_DIRS = True  # Include empty directories in the structure tree
 INCLUDE_EMPTY_FILES = True  # Include empty files in output (structure only, no empty code blocks)
 
 # Clipboard safety
-MAX_CLIPBOARD_CHARS = 10000  # Maximum characters to copy to clipboard (0 to disable)
+MAX_CLIPBOARD_CHARS = 500000  # Maximum characters to copy to clipboard (0 to disable)

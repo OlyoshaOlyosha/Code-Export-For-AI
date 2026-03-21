@@ -19,72 +19,79 @@ except ImportError:
     config = None
 
 
-def get_default_config() -> dict[str, Any]:
-    """Get default configuration values.
-
-    Returns:
-        Dict[str, Any]: Default configuration dictionary.
-
-    """
-    return {
-        "blacklist_extensions": set(),
-        "blacklist_dirs": set(),
-        "blacklist_filenames": set(),
-        "filename_filter_mode": "exact",
-        "default_output": "output.txt",
-        "output_format": "txt",
-        "max_size": 1 * 1024 * 1024,
-        "create_file": True,
-        "copy_to_buffer": True,
-        "use_pygments": True,
-        "show_progress": True,
-        "include_empty_files": False,
-        "export_structure": True,
-        "export_content": True,
-        "show_empty_dirs": False,
-        "max_clipboard_chars": 0,
-    }
-
-
 def load_config() -> dict[str, Any]:
     """Load configuration from config.py.
 
     Returns:
-        Dict[str, Any]: Configuration dictionary with default values if config.py is missing or invalid.
+        Dict[str, Any]: Configuration dictionary.
+
+    Raises:
+        SystemExit: If config.py is missing or incomplete.
 
     """
     if config is None:
         error("ERROR: config.py not found!")
         info("Please copy config.py from the repository: https://github.com/OlyoshaOlyosha/Code-Export-For-AI")
         info("The tool requires proper configuration to filter out binaries, vendor folders, etc.")
-        warning("Running with empty filters — this may include unwanted files and make output huge.")
-        return get_default_config()
+        input("\nPress Enter to exit...")
+        raise SystemExit(1)
 
-    try:
-        info("Configuration loaded from config.py")
-        return {
-            "blacklist_extensions": getattr(config, "BLACKLIST_EXTENSIONS", set()),
-            "blacklist_dirs": getattr(config, "BLACKLIST_DIRS", set()),
-            "blacklist_filenames": getattr(config, "BLACKLIST_FILENAMES", set()),
-            "filename_filter_mode": getattr(config, "FILENAME_FILTER_MODE", "exact"),
-            "output_dir": getattr(config, "OUTPUT_DIR", "outputs"),
-            "default_output": getattr(config, "OUTPUT_FILENAME", "output.txt"),
-            "output_format": getattr(config, "OUTPUT_FORMAT", "txt"),
-            "max_size": getattr(config, "MAX_FILE_SIZE_MB", 1) * 1024 * 1024,
-            "create_file": getattr(config, "CREATE_FILE", True),
-            "copy_to_buffer": getattr(config, "COPY_TO_CLIPBOARD", True),
-            "use_pygments": getattr(config, "USE_PYGMENTS", True),
-            "show_progress": getattr(config, "SHOW_PROGRESS", True),
-            "include_empty_files": getattr(config, "INCLUDE_EMPTY_FILES", False),
-            "export_structure": getattr(config, "EXPORT_STRUCTURE", True),
-            "export_content": getattr(config, "EXPORT_CONTENT", True),
-            "show_empty_dirs": getattr(config, "SHOW_EMPTY_DIRS", False),
-            "max_clipboard_chars": getattr(config, "MAX_CLIPBOARD_CHARS", 0),
-        }
-    except AttributeError as e:
-        warning(f"WARNING: Missing setting in config.py: {e}")
-        info("Using safe fallback values.")
-        return get_default_config()
+    required_attrs = {
+        "BLACKLIST_EXTENSIONS": set,
+        "BLACKLIST_DIRS": set,
+        "BLACKLIST_FILENAMES": set,
+        "FILENAME_FILTER_MODE": str,
+        "OUTPUT_DIR": str,
+        "OUTPUT_FILENAME": str,
+        "OUTPUT_FORMAT": str,
+        "MAX_FILE_SIZE_MB": (int, float),
+        "CREATE_FILE": bool,
+        "COPY_TO_CLIPBOARD": bool,
+        "USE_PYGMENTS": bool,
+        "SHOW_PROGRESS": bool,
+        "INCLUDE_EMPTY_FILES": bool,
+        "EXPORT_STRUCTURE": bool,
+        "EXPORT_CONTENT": bool,
+        "SHOW_EMPTY_DIRS": bool,
+        "MAX_CLIPBOARD_CHARS": int,
+    }
+
+    config_dict = {}
+    for attr, expected_type in required_attrs.items():
+        if not hasattr(config, attr):
+            error(f"ERROR: config.py is missing required setting: {attr}")
+            info("Please ensure your config.py contains all settings from the template.")
+            input("\nPress Enter to exit...")
+            raise SystemExit(1)
+        value = getattr(config, attr)
+        if not isinstance(value, expected_type):
+            error(f"ERROR: config.py setting {attr} has wrong type (expected {expected_type})")
+            input("\nPress Enter to exit...")
+            raise SystemExit(1)
+        config_dict[attr.lower()] = value
+
+    # Special handling for max_size
+    config_dict["max_size"] = config_dict.pop("max_file_size_mb") * 1024 * 1024
+    # Rename keys to match internal names
+    config_dict["output_dir"] = config_dict.pop("output_dir")
+    config_dict["default_output"] = config_dict.pop("output_filename")
+    config_dict["output_format"] = config_dict.pop("output_format")
+    config_dict["create_file"] = config_dict.pop("create_file")
+    config_dict["copy_to_buffer"] = config_dict.pop("copy_to_clipboard")
+    config_dict["use_pygments"] = config_dict.pop("use_pygments")
+    config_dict["show_progress"] = config_dict.pop("show_progress")
+    config_dict["include_empty_files"] = config_dict.pop("include_empty_files")
+    config_dict["export_structure"] = config_dict.pop("export_structure")
+    config_dict["export_content"] = config_dict.pop("export_content")
+    config_dict["show_empty_dirs"] = config_dict.pop("show_empty_dirs")
+    config_dict["max_clipboard_chars"] = config_dict.pop("max_clipboard_chars")
+    config_dict["blacklist_extensions"] = config_dict.pop("blacklist_extensions")
+    config_dict["blacklist_dirs"] = config_dict.pop("blacklist_dirs")
+    config_dict["blacklist_filenames"] = config_dict.pop("blacklist_filenames")
+    config_dict["filename_filter_mode"] = config_dict.pop("filename_filter_mode")
+
+    info("Configuration loaded from config.py")
+    return config_dict
 
 
 def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
