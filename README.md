@@ -1,6 +1,6 @@
 # Code Export For AI
 
-![Python](https://img.shields.io/badge/Python-3.6%2B-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![Version](https://img.shields.io/github/v/release/OlyoshaOlyosha/Code-Export-For-AI?label=Version&color=orange)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
 
@@ -19,25 +19,37 @@ Tool to export any project folder or repository into a single, neatly formatted 
 - Quick repository snapshots for onboarding, audits or issue reproduction.
 
 ## Features
-- Recursively scans a directory and collects source files
-- Configurable ignore rules for directories, filenames and extensions (`config.py`)
-- Save output to a file and/or copy to the clipboard
-- Print simple statistics (file count, characters, runtime)
-- Works with CLI or GUI folder picker (Tkinter)
+- Recursively scans a directory and collects source files.
+- Configurable ignore rules for directories, filenames and extensions (`config.py`).
+- Filename filtering with exact or partial matching (`FILENAME_FILTER_MODE`).
+- Export project directory structure (ASCII tree) and file contents separately.
+- Option to show empty directories in the structure (`SHOW_EMPTY_DIRS`) and include empty files (only in structure, no code block, `INCLUDE_EMPTY_FILES`).
+- Save output to a file and/or copy to the clipboard.
+- Automatic unique filename generation when output file already exists.
+- Clipboard safety limit to avoid pasting huge amounts of text accidentally.
+- Print simple statistics (file count, characters, runtime).
+- Works with CLI or GUI folder picker (Tkinter).
+- Interactive mode – restart export without retyping paths.
+- If both structure and content export are disabled, the tool asks whether to enable content export and updates `config.py` automatically.
 
 ## Installation / Requirements
-- Requires Python 3.6+ (recommended)
+- Python 3.10 or higher (recommended).
+- Required: `colorama` for colored console output.
+- Optional: `pyperclip` for more reliable cross-platform clipboard support (if not installed, the tool falls back to native utilities: `clip`, `pbcopy`, `xclip`/`xsel`).
 
-- Optional clipboard support: install `pyperclip` (recommended for macOS/Linux or for a more reliable cross-platform clipboard).
-
-Install optional dependency (one of the options below):
+Install dependencies:
 
 ```powershell
-# install only pyperclip
-pip install pyperclip
-
-# or install from project's requirements.txt
+# install from project's requirements.txt
 pip install -r requirements.txt
+```
+
+Or install manually:
+
+```powershell
+pip install colorama
+# optional, for better clipboard support
+pip install pyperclip
 ```
 
 ## Quickstart
@@ -54,7 +66,9 @@ Or provide a folder and output file directly:
 python main.py -d "C:\path\to\project" -o export.txt
 ```
 
-3. If you run without `-d`, a folder selection dialog opens. The script will create `output.txt` by default and may copy the content to the clipboard if enabled. Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
+3. If you run without `-d`, a folder selection dialog opens. The script will create `output.txt` inside the `outputs/` folder by default and may copy the content to the clipboard if enabled. Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
+
+After export, the tool asks whether to restart (type `r`) or exit (press Enter). This lets you quickly process another folder without re‑entering the path.
 
 ## Sample output
 Each file is exported with a relative path header followed by a fenced code block. Example:
@@ -76,27 +90,59 @@ function Button() {
 ```
 ````
 
+If `EXPORT_STRUCTURE` is enabled (default), the output begins with a project directory tree, followed by the file contents:
+
+````
+```
+# Project Directory Structure:
+myproject/
+├── src/
+│   ├── main.py
+│   └── utils/
+│       └── helpers.py
+└── README.md
+
+# BEGIN FILE CONTENTS
+
+src/main.py:
+```python
+def main():
+    print("Hello")
+```
+````
+
+When `INCLUDE_EMPTY_FILES` is enabled (default), empty files are shown in the structure but have no code block. When `SHOW_EMPTY_DIRS` is enabled, empty directories are also shown.
+
 ## Configuration
-The script loads `config.py` from the same folder (if present). Defaults are used otherwise. Key options:
+The script **requires** a valid `config.py` file in the same folder. It will not run without it. Copy the example `config.py` from the repository and adjust it as needed. Key options:
 
-- `BLACKLIST_EXTENSIONS` — set of file extensions to ignore
-- `BLACKLIST_DIRS` — directories to skip (e.g. `node_modules`, `.git`)
-- `OUTPUT_FILENAME` — default output file name
-- `MAX_FILE_SIZE_MB` — maximum file size to include
-- `CREATE_FILE` — whether to write the output file
-- `COPY_TO_CLIPBOARD` — whether to copy result to clipboard
-- `BLACKLIST_FILENAMES` — filenames to ignore
-- `FILENAME_FILTER_MODE` — `'exact'` or `'contains'`
-- `USE_PYGMENTS` — (bool) enable `pygments`-based detection of fenced-code language tags (default: `True`).
-- `EXTENSION_LANGUAGE_MAP` — dict mapping extensions (no dot) to language tags used in fenced code blocks. Used as a fallback and fully user-overridable.
-- `EXPORT_STRUCTURE` — (bool) include project directory structure (ASCII tree) in output (default: `True`).
-- `EXPORT_CONTENT` — (bool) include file contents in output (default: `False`).
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `BLACKLIST_EXTENSIONS` | Set of extensions (e.g., `"png"`, `"jpg"`, `"txt"`, `"md"`, `"log"`, `"pyc"`) | File extensions to ignore. |
+| `BLACKLIST_DIRS` | Set of directory names | Directories to skip (e.g., `node_modules`, `.git`, `__pycache__`). |
+| `BLACKLIST_FILENAMES` | Set of filenames | Specific filenames to ignore. |
+| `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
+| `OUTPUT_DIR` | `"outputs"` | Default directory where output files are saved. |
+| `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR`). |
+| `MAX_FILE_SIZE_MB` | `5` | Maximum file size to include (in MB). |
+| `CREATE_FILE` | `True` | Whether to write the output file. |
+| `COPY_TO_CLIPBOARD` | `True` | Whether to copy result to clipboard. |
+| `EXPORT_STRUCTURE` | `True` | Include project directory structure (ASCII tree) in output. |
+| `EXPORT_CONTENT` | `True` | Include file contents (code) in output. |
+| `SHOW_EMPTY_DIRS` | `True` | When `EXPORT_STRUCTURE` is `True`, show empty directories in the tree. |
+| `INCLUDE_EMPTY_FILES` | `True` | When `EXPORT_CONTENT` is `True`, include empty files (only in structure, no code block). |
+| `MAX_CLIPBOARD_CHARS` | `500000` | Maximum characters to copy to clipboard; set to `0` to disable the limit. |
 
-When `USE_PYGMENTS` is enabled and `pygments` is installed the script will try to auto-detect language aliases from filename+content; otherwise it falls back to `EXTENSION_LANGUAGE_MAP`. If no language is found the code fence remains untagged. To customize, edit `config.py`.
+> **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will ask whether to enable `EXPORT_CONTENT` for this run and automatically update `config.py` for future runs.
+
+Language detection for code fences is based on file extension using a built-in mapping (e.g., `.py` → `python`, `.js` → `javascript`). The mapping can be extended by editing the `EXTENSION_LANGUAGE_MAP` dictionary in `exporter/processor.py` if needed.
 
 ## Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` or run on a subset of folders.
 - If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed or install `pyperclip`.
+- To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in `config.py`.
+- If the output is too large for the clipboard, increase `MAX_CLIPBOARD_CHARS` or set it to `0`.
+- The tool automatically generates a unique filename (e.g., `output_1.txt`) if the default file already exists.
 
 ## Contributing
 Improvements welcome — open an issue or submit a pull request.
