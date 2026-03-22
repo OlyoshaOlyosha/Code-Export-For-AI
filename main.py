@@ -235,7 +235,7 @@ def perform_export(
 
 
 def main() -> None:
-    __version__ = "1.1.0"
+    __version__ = "1.2.0"
     __app_name__ = "Code Export For AI"
 
     header(f"{__app_name__} v{__version__}")
