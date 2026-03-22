@@ -88,7 +88,20 @@ def load_config() -> dict[str, Any]:
 
 
 def check_export_options(config: dict[str, Any]) -> dict[str, Any]:
-    """Check and adjust export options if necessary."""
+    """Check and adjust export options if necessary.
+
+    - If both file and clipboard outputs are disabled, enables file output.
+    - If both structure and content exports are disabled, prompts the user
+      to enable content export. If the user agrees, the config file is updated.
+
+    Args:
+        config: Configuration dictionary.
+
+    Returns:
+        The modified configuration dictionary, or an empty dict
+        if the user chooses to exit.
+
+    """
     create_file = config["create_file"]
     copy_to_buffer = config["copy_to_buffer"]
 

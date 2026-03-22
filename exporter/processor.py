@@ -1,6 +1,6 @@
 """Project file processing and export module.
 
-Contains core logic: reading files, language detection for syntax highlighting,
+Contains core logic: reading files, language detection for code‑fence tags,
 project structure generation, and final output formatting.
 """
 
@@ -181,6 +181,7 @@ def generate_project_structure(input_dir: str, processed_paths: set[str], config
     Args:
         input_dir: Path to the input directory.
         processed_paths: Set of relative paths that were processed.
+        config: Configuration dictionary (used for show_empty_dirs flag).
 
     Returns:
         A string representation of the project structure as an ASCII tree.
@@ -231,7 +232,7 @@ def generate_project_structure(input_dir: str, processed_paths: set[str], config
 
 
 def detect_language(file_path: str) -> str:
-    """Detect language tag for syntax highlighting based on file extension."""
+    """Detect language tag for code fences based on file extension."""
     ext = Path(file_path).suffix.lower().lstrip(".")
     return EXTENSION_LANGUAGE_MAP.get(ext, "")
 
