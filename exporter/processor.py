@@ -14,7 +14,6 @@ from exporter.console import error, success, warning
 from exporter.scanner import is_code_file
 
 # Default mapping from file extension to language tag for code fences
-# Used as fallback when Pygments is not available or fails
 EXTENSION_LANGUAGE_MAP: dict[str, str] = {
     "py": "python",
     "pyw": "python",

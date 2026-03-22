@@ -43,12 +43,9 @@ def load_config() -> dict[str, Any]:
         "FILENAME_FILTER_MODE": str,
         "OUTPUT_DIR": str,
         "OUTPUT_FILENAME": str,
-        "OUTPUT_FORMAT": str,
         "MAX_FILE_SIZE_MB": (int, float),
         "CREATE_FILE": bool,
         "COPY_TO_CLIPBOARD": bool,
-        "USE_PYGMENTS": bool,
-        "SHOW_PROGRESS": bool,
         "INCLUDE_EMPTY_FILES": bool,
         "EXPORT_STRUCTURE": bool,
         "EXPORT_CONTENT": bool,
@@ -72,14 +69,10 @@ def load_config() -> dict[str, Any]:
 
     # Special handling for max_size
     config_dict["max_size"] = config_dict.pop("max_file_size_mb") * 1024 * 1024
-    # Rename keys to match internal names
     config_dict["output_dir"] = config_dict.pop("output_dir")
     config_dict["default_output"] = config_dict.pop("output_filename")
-    config_dict["output_format"] = config_dict.pop("output_format")
     config_dict["create_file"] = config_dict.pop("create_file")
     config_dict["copy_to_buffer"] = config_dict.pop("copy_to_clipboard")
-    config_dict["use_pygments"] = config_dict.pop("use_pygments")
-    config_dict["show_progress"] = config_dict.pop("show_progress")
     config_dict["include_empty_files"] = config_dict.pop("include_empty_files")
     config_dict["export_structure"] = config_dict.pop("export_structure")
     config_dict["export_content"] = config_dict.pop("export_content")

@@ -60,14 +60,9 @@ FILENAME_FILTER_MODE = "exact"
 # Output settings
 OUTPUT_DIR = "outputs"  # Default directory for output files
 OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
-OUTPUT_FORMAT = "txt"  # future: 'md'
 MAX_FILE_SIZE_MB = 5  # Max file size to include (in MB)
 CREATE_FILE = True  # Write output to file
 COPY_TO_CLIPBOARD = True  # Copy output to clipboard
-
-# Features
-USE_PYGMENTS = True  # Enable syntax highlighting
-SHOW_PROGRESS = True  # Show progress during export
 
 # Export options
 EXPORT_STRUCTURE = True  # Include project directory tree in output
