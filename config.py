@@ -73,3 +73,6 @@ INCLUDE_EMPTY_FILES = True  # Include empty files in output (structure only, no 
 
 # Clipboard safety
 MAX_CLIPBOARD_CHARS = 500000  # Maximum characters to copy to clipboard (0 to disable)
+
+# Directory traversal depth
+MAX_DEPTH = 0  # 0 = unlimited, positive integer = maximum depth

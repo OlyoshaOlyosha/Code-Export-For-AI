@@ -51,6 +51,7 @@ def load_config() -> dict[str, Any]:
         "EXPORT_CONTENT": bool,
         "SHOW_EMPTY_DIRS": bool,
         "MAX_CLIPBOARD_CHARS": int,
+        "MAX_DEPTH": int,
     }
 
     config_dict = {}
@@ -78,6 +79,7 @@ def load_config() -> dict[str, Any]:
     config_dict["export_content"] = config_dict.pop("export_content")
     config_dict["show_empty_dirs"] = config_dict.pop("show_empty_dirs")
     config_dict["max_clipboard_chars"] = config_dict.pop("max_clipboard_chars")
+    config_dict["max_depth"] = config_dict.pop("max_depth")
     config_dict["blacklist_extensions"] = config_dict.pop("blacklist_extensions")
     config_dict["blacklist_dirs"] = config_dict.pop("blacklist_dirs")
     config_dict["blacklist_filenames"] = config_dict.pop("blacklist_filenames")

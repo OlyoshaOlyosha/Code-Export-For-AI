@@ -249,6 +249,73 @@ def _generate_structure_with_empty_dirs(input_dir: str, processed_paths: set[str
     return "\n".join(lines)
 
 
+def _generate_structure_with_depth(
+    input_dir: str,
+    processed_paths: set[str],
+    extra_dirs: set[str],
+) -> str:
+    """Generate project tree from processed files and truncated directories.
+
+    Used when MAX_DEPTH > 0. Shows files and directories (including those
+    truncated by depth limit), but not their children.
+
+    Args:
+        input_dir: Path to the project root.
+        processed_paths: Relative paths of exported files.
+        extra_dirs: Relative paths of directories to show (even if empty).
+
+    Returns:
+        ASCII tree string.
+
+    """
+    root = {}
+    # Add files
+    for rel_path in processed_paths:
+        parts = rel_path.replace("\\", "/").split("/")
+        current = root
+        for part in parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        filename = parts[-1]
+        if "__files__" not in current:
+            current["__files__"] = []
+        current["__files__"].append(filename)
+
+    # Add directories (placeholders)
+    for rel_dir in extra_dirs:
+        if not rel_dir or rel_dir == ".":
+            continue
+        parts = rel_dir.replace("\\", "/").split("/")
+        current = root
+        for part in parts:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        # No files added – the directory node already exists
+
+    # Render tree (same as original render_node)
+    def render_node(node: dict, prefix: str = "") -> list[str]:
+        lines = []
+        dirs = [k for k in node if k != "__files__"]
+        files = sorted(node.get("__files__", []))
+        pointers = ["├── "] * (len(dirs) + len(files) - 1) + (["└── "] if dirs + files else [])
+        for i, name in enumerate(sorted(dirs) + files):
+            pointer = pointers[i]
+            is_dir = name in dirs
+            line = f"{prefix}{pointer}{name}/" if is_dir else f"{prefix}{pointer}{name}"
+            lines.append(line)
+            if is_dir:
+                extension = "    " if pointer == "└── " else "│   "
+                lines.extend(render_node(node[name], prefix + extension))
+        return lines
+
+    root_name = Path(input_dir).name + "/"
+    lines = ["# Project Directory Structure:", root_name]
+    lines.extend(render_node(root))
+    return "\n".join(lines)
+
+
 def generate_project_structure(input_dir: str, processed_paths: set[str], config: dict[str, Any]) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
@@ -405,10 +472,26 @@ def export_project(
     files_by_dir = defaultdict(list)
     all_content: list[str] = []
     processed_paths: set[str] = set()
+    extra_dirs: set[str] = set()
+
+    max_depth = config.get("max_depth", 0)
 
     for root, dirs, files in os.walk(input_dir):
-        # In-place filter directories
+        # Compute depth relative to input_dir
+        rel_root = os.path.relpath(root, input_dir)
+        depth = 0 if rel_root == "." else len(Path(rel_root).parts)
+
+        # Filter directories (always)
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
+
+        if max_depth > 0:
+            if depth > max_depth:
+                dirs.clear()
+                continue
+            if depth == max_depth:
+                if rel_root != ".":
+                    extra_dirs.add(rel_root)
+                dirs.clear()
 
         for filename in files:
             file_path = str(Path(root) / filename)
@@ -440,7 +523,20 @@ def export_project(
                 all_content.append(chunk)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-    full_output = build_full_output(input_dir, processed_paths, all_content, config)
+
+    if max_depth > 0:
+        structure = _generate_structure_with_depth(input_dir, processed_paths, extra_dirs)
+        parts: list[str] = []
+        if config.get("export_structure", True):
+            parts.append(structure)
+        if config.get("export_content", True):
+            if parts:
+                parts.append("\n")
+            parts.append("# BEGIN FILE CONTENTS\n\n")
+            parts.append("".join(all_content))
+        full_output = "".join(parts)
+    else:
+        full_output = build_full_output(input_dir, processed_paths, all_content, config)
 
     if create_file:
         output_path = Path(output_file)
