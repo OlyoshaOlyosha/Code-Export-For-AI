@@ -15,14 +15,17 @@ from exporter.scanner import is_code_file
 
 # Default mapping from file extension to language tag for code fences
 EXTENSION_LANGUAGE_MAP: dict[str, str] = {
+    # ==================== Python ====================
     "py": "python",
     "pyw": "python",
+    # ==================== JavaScript / TypeScript ====================
     "js": "javascript",
     "mjs": "javascript",
     "cjs": "javascript",
     "ts": "typescript",
     "jsx": "jsx",
     "tsx": "tsx",
+    # ==================== Java / C / C++ / C# ====================
     "java": "java",
     "c": "c",
     "h": "c",
@@ -31,41 +34,112 @@ EXTENSION_LANGUAGE_MAP: dict[str, str] = {
     "cxx": "cpp",
     "hpp": "cpp",
     "cs": "csharp",
-    "go": "go",
+    # ==================== Rust / Go / Ruby / PHP ====================
     "rs": "rust",
     "rb": "ruby",
     "php": "php",
+    # ==================== Shell & Scripting ====================
     "sh": "bash",
     "bash": "bash",
     "ps1": "powershell",
     "psm1": "powershell",
     "psd1": "powershell",
+    "pl": "perl",
+    "pm": "perl",
+    "t": "perl",
+    "cgi": "perl",
+    "awk": "awk",
+    "sed": "sed",
+    "bat": "batch",
+    "cmd": "batch",
+    "ahk": "autohotkey",
+    # ==================== Web (HTML / CSS) ====================
     "html": "html",
     "htm": "html",
     "css": "css",
-    "json": "json",
+    "scss": "scss",
+    "sass": "sass",
+    "less": "less",
+    "styl": "stylus",
+    # ==================== Markup & Documentation ====================
+    "md": "markdown",
+    "mdx": "mdx",
+    "rst": "rst",
+    "asciidoc": "asciidoc",
+    "adoc": "asciidoc",
+    "latex": "latex",
+    "tex": "latex",
+    "bib": "bibtex",
+    # ==================== Data & Configuration ====================
     "yml": "yaml",
     "yaml": "yaml",
+    "json": "json",
     "xml": "xml",
-    "sql": "sql",
-    "md": "markdown",
-    "markdown": "markdown",
+    "toml": "toml",
+    "ini": "ini",
+    "conf": "ini",
+    "cfg": "ini",
+    "config": "ini",
+    "properties": "properties",
+    "csv": "csv",
+    "tsv": "tsv",
+    "log": "log",
+    "env": "env",
+    "txt": "text",
+    # ==================== Infrastructure & Build ====================
     "dockerfile": "dockerfile",
     "makefile": "makefile",
-    "txt": "",
-    "ini": "ini",
-    "toml": "toml",
+    "tf": "hcl",
+    "tfvars": "hcl",
+    "hcl": "hcl",
+    "nix": "nix",
+    "cmake": "cmake",
     "gradle": "groovy",
     "groovy": "groovy",
-    "dart": "dart",
-    "kt": "kotlin",
-    "kts": "kotlin",
-    "scala": "scala",
-    "jl": "julia",
-    "r": "r",
-    "swift": "swift",
+    # ==================== Database & Query Languages ====================
+    "sql": "sql",
+    "graphql": "graphql",
+    "gql": "graphql",
+    "proto": "protobuf",
+    "thrift": "thrift",
+    # ==================== Functional & Other Languages ====================
+    "ex": "elixir",
+    "exs": "elixir",
+    "eex": "elixir",
+    "heex": "elixir",
+    "clj": "clojure",
+    "cljs": "clojure",
+    "cljc": "clojure",
     "erl": "erlang",
     "hs": "haskell",
+    "fs": "fsharp",
+    "fsi": "fsharp",
+    "fsx": "fsharp",
+    "jl": "julia",
+    "nim": "nim",
+    "zig": "zig",
+    "crystal": "crystal",
+    "elm": "elm",
+    "purs": "purescript",
+    "d": "d",
+    # ==================== Frontend Frameworks ====================
+    "svelte": "svelte",
+    "vue": "vue",
+    "astro": "astro",
+    # ==================== Assembly & Low-level ====================
+    "asm": "asm",
+    "s": "asm",
+    # ==================== .NET & Visual Basic ====================
+    "vb": "vbnet",
+    "vbs": "vbnet",
+    # ==================== Ignore Files ====================
+    "dockerignore": "dockerignore",
+    "gitignore": "gitignore",
+    "editorconfig": "editorconfig",
+    # ==================== Other ====================
+    "jinja": "jinja",
+    "j2": "jinja",
+    "prisma": "prisma",
 }
 
 
@@ -356,7 +430,12 @@ def export_project(
 
             if content != "":
                 language = detect_language(file_path)
-                lang_tag = language or ""
+                # If language mapping is missing, fall back to the extension itself (if any)
+                if language:
+                    lang_tag = language
+                else:
+                    ext = Path(file_path).suffix.lower().lstrip(".")
+                    lang_tag = ext or ""  # empty if no extension
                 chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
                 all_content.append(chunk)
 
