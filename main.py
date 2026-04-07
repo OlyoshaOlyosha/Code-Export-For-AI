@@ -335,45 +335,49 @@ def main() -> None:
     __version__ = "1.2.0"
     __app_name__ = "Code Export For AI"
 
-    header(f"{__app_name__} v{__version__}")
+    try:
+        header(f"{__app_name__} v{__version__}")
 
-    args = parse_arguments()
+        args = parse_arguments()
 
-    # 1. Choose configuration file
-    config_path = select_config_file(args.config)
-    if config_path is None:
+        # 1. Choose configuration file
+        config_path = select_config_file(args.config)
+        if config_path is None:
+            input("\nPress Enter to exit...")
+            return
+
+        # 2. Load and validate configuration
+        config_dict = load_config(config_path)
+
+        # Append configuration name (without .py) to output directory
+        config_stem = config_path.stem
+        base_output = Path(config_dict["output_dir"])
+        config_dict["output_dir"] = str(base_output / config_stem)
+
+        config_dict = check_export_options(config_dict)
+        if not config_dict:
+            input("\nPress Enter to exit...")
+            return
+
+        create_file = config_dict["create_file"]
+        copy_to_buffer = config_dict["copy_to_buffer"]
+
+        # 3. Get input directory (use command line arg if provided)
+        input_dir = get_input_directory(args)
+        if not input_dir:
+            input("\nPress Enter to exit...")
+            return
+
+        # 4. Determine output filename
+        output_file = get_output_filename(args, config_dict)
+
+        # 5. Perform the export
+        perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
+
         input("\nPress Enter to exit...")
+    except KeyboardInterrupt:
+        print("\n\nOperation cancelled by user.")
         return
-
-    # 2. Load and validate configuration
-    config_dict = load_config(config_path)
-
-    # Append configuration name (without .py) to output directory
-    config_stem = config_path.stem
-    base_output = Path(config_dict["output_dir"])
-    config_dict["output_dir"] = str(base_output / config_stem)
-
-    config_dict = check_export_options(config_dict)
-    if not config_dict:
-        input("\nPress Enter to exit...")
-        return
-
-    create_file = config_dict["create_file"]
-    copy_to_buffer = config_dict["copy_to_buffer"]
-
-    # 3. Get input directory (use command line arg if provided)
-    input_dir = get_input_directory(args)
-    if not input_dir:
-        input("\nPress Enter to exit...")
-        return
-
-    # 4. Determine output filename
-    output_file = get_output_filename(args, config_dict)
-
-    # 5. Perform the export
-    perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
-
-    input("\nPress Enter to exit...")
 
 
 if __name__ == "__main__":
