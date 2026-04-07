@@ -375,7 +375,7 @@ def main() -> None:
             return
 
         # 4. Determine output filename
-        output_file = get_output_filename(args, config_dict)
+        output_file = get_output_filename(args, config_dict, create_file=create_file)
 
         # 5. Perform the export
         perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
