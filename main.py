@@ -280,6 +280,8 @@ def get_input_directory(args: argparse.Namespace) -> str | None:
 def get_output_filename(
     args: argparse.Namespace,
     config: dict[str, Any],
+    *,
+    create_file: bool,
 ) -> str:
     """
     Determine output filename based on command line arguments and config.
@@ -287,6 +289,7 @@ def get_output_filename(
     Args:
         args: Parsed command line arguments.
         config: Configuration dictionary.
+        create_file: Whether the file will actually be written (skips uniqueness check if False).
 
     Returns:
         Output file path as string.
@@ -304,8 +307,11 @@ def get_output_filename(
     # No command line output specified: use OUTPUT_DIR / default_output
     base_dir = Path(config["output_dir"])
     candidate = base_dir / config["default_output"]
-    # Ensure uniqueness
-    return get_next_filename(str(candidate))
+
+    # Only generate a unique filename if we actually intend to create the file
+    if create_file:
+        return get_next_filename(str(candidate))
+    return str(candidate)
 
 
 def perform_export(
