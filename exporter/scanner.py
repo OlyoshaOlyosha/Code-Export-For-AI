@@ -1,9 +1,10 @@
 """Module for scanning and filtering code files based on blacklist rules."""
 
 from pathlib import Path
+from typing import Any
 
 
-def is_code_file(file_path: str, config: dict) -> bool:
+def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
     """Determine if a file should be included in the export based on filters.
 
     Args:

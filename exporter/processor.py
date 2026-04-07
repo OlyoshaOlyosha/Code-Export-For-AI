@@ -191,12 +191,11 @@ def _generate_structure_with_empty_dirs(input_dir: str, processed_paths: set[str
     dir_tree = {}  # root node representing contents of input_dir
 
     for root, dirs, _ in os.walk(input_dir):
-        # Filter dirs in-place: skip hidden and blacklisted
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in blacklist_dirs]
 
-        rel_root = os.path.relpath(root, input_dir)
+        rel_root = Path(root).relative_to(input_dir).as_posix()
         if rel_root == ".":
-            continue  # root directory itself is represented by dir_tree
+            continue
 
         # Ensure all parent directories exist in the tree
         parts = Path(rel_root).parts
@@ -448,6 +447,119 @@ def handle_clipboard_copy(
     return False
 
 
+def _collect_files(
+    input_dir: str,
+    config: dict[str, Any],
+) -> tuple[defaultdict[str, list[str]], list[str], set[str], set[str]]:
+    """Collect files during directory traversal respecting depth limit.
+
+    Args:
+        input_dir: Path to the project root.
+        config: Configuration dictionary containing 'max_depth', 'blacklist_dirs',
+            'include_empty_files', etc.
+
+    Returns:
+        Tuple of:
+            - files_by_dir: Mapping from directory to list of file names.
+            - all_content: List of formatted file content chunks.
+            - processed_paths: Set of relative paths of included files.
+            - extra_dirs: Set of directories that are truncated at depth limit.
+
+    """
+    files_by_dir: defaultdict[str, list[str]] = defaultdict(list)
+    all_content: list[str] = []
+    processed_paths: set[str] = set()
+    extra_dirs: set[str] = set()
+
+    max_depth = config.get("max_depth", -1)  # -1 = unlimited, 0 = only root, >0 = limited
+    input_path = Path(input_dir)
+
+    for root, dirs, files in os.walk(input_dir):
+        rel_root = Path(root).relative_to(input_dir).as_posix()
+        depth = 0 if rel_root == "." else len(Path(rel_root).parts)
+
+        # Filter out blacklisted and hidden directories
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
+
+        # Apply depth limit (-1 means unlimited)
+        if max_depth != -1:
+            if depth > max_depth:
+                dirs.clear()
+                continue
+            if depth == max_depth:
+                if rel_root != ".":  # don't mark root as "extra"
+                    extra_dirs.add(rel_root)
+                dirs.clear()  # do not go deeper
+
+        for filename in files:
+            file_path = Path(root) / filename
+
+            if not is_code_file(str(file_path), config):
+                continue
+
+            content = read_file_content(str(file_path))
+            if content is None:
+                continue
+
+            if not config.get("include_empty_files", True) and content == "":
+                continue
+
+            rel_path = file_path.relative_to(input_path).as_posix()
+            rel_dir = Path(rel_path).parent.as_posix()
+            files_by_dir[rel_dir].append(filename)
+            processed_paths.add(rel_path)
+
+            if content:
+                language = detect_language(str(file_path))
+                lang_tag = language or Path(file_path).suffix.lower().lstrip(".")
+                chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
+                all_content.append(chunk)
+
+    return files_by_dir, all_content, processed_paths, extra_dirs
+
+
+def _build_output(
+    input_dir: str,
+    processed_paths: set[str],
+    all_content: list[str],
+    extra_dirs: set[str],
+    config: dict[str, Any],
+) -> str:
+    """Build the final output string, respecting the configured depth limit.
+
+    When max_depth == -1 (unlimited), the full output (with empty directories
+    if configured) is generated. Otherwise (0 or positive) a depth‑aware
+    structure that includes truncated directories is used.
+
+    Args:
+        input_dir: Project root path.
+        processed_paths: Set of relative paths of included files.
+        all_content: List of formatted file content chunks.
+        extra_dirs: Directories that were truncated because of depth limit.
+        config: Configuration dictionary.
+
+    Returns:
+        Complete output string (structure + contents).
+
+    """
+    max_depth = config.get("max_depth", -1)
+    if max_depth == -1:
+        # Unlimited depth: use the full output (respects SHOW_EMPTY_DIRS)
+        return build_full_output(input_dir, processed_paths, all_content, config)
+
+    # Depth is limited (0 = only root, >0 = limited)
+    structure = _generate_structure_with_depth(input_dir, processed_paths, extra_dirs)
+    parts: list[str] = []
+    if config.get("export_structure", True):
+        parts.append(structure)
+    if config.get("export_content", True):
+        if parts:
+            parts.append("\n")
+        parts.append("# BEGIN FILE CONTENTS\n\n")
+        parts.append("".join(all_content))
+    return "".join(parts)
+
+
 def export_project(
     input_dir: str,
     output_file: str,
@@ -456,87 +568,25 @@ def export_project(
     create_file: bool = True,
     copy_to_buffer: bool = False,
 ) -> tuple[dict[str, list[str]], int]:
-    """Export project: scan, filter, read, and produce output.
+    """Export project: collect files, build output, write to file and/or copy to clipboard.
 
     Args:
-        input_dir: Path to the input directory.
-        output_file: Path to the output file.
-        config: Configuration dictionary.
-        create_file: Whether to create the output file.
-        copy_to_buffer: Whether to copy the output to clipboard.
+        input_dir: Path to the project root directory.
+        output_file: Path where the output file will be saved.
+        config: Configuration dictionary with export settings.
+        create_file: Whether to write the output to a file.
+        copy_to_buffer: Whether to copy the output to the clipboard.
 
     Returns:
-        A tuple containing a dictionary of files by directory and total character count.
+        Tuple containing:
+            - files_by_dir: Dictionary mapping directories to lists of file names.
+            - total_chars: Total number of characters in the exported content.
 
     """
-    files_by_dir = defaultdict(list)
-    all_content: list[str] = []
-    processed_paths: set[str] = set()
-    extra_dirs: set[str] = set()
-
-    max_depth = config.get("max_depth", 0)
-
-    for root, dirs, files in os.walk(input_dir):
-        # Compute depth relative to input_dir
-        rel_root = os.path.relpath(root, input_dir)
-        depth = 0 if rel_root == "." else len(Path(rel_root).parts)
-
-        # Filter directories (always)
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
-
-        if max_depth > 0:
-            if depth > max_depth:
-                dirs.clear()
-                continue
-            if depth == max_depth:
-                if rel_root != ".":
-                    extra_dirs.add(rel_root)
-                dirs.clear()
-
-        for filename in files:
-            file_path = str(Path(root) / filename)
-
-            if not is_code_file(file_path, config):
-                continue
-
-            content = read_file_content(file_path)
-            if content is None:
-                continue
-
-            if not config.get("include_empty_files", True) and content == "":
-                continue
-
-            rel_path = os.path.relpath(file_path, input_dir)
-            rel_dir = str(Path(rel_path).parent) or "."
-            files_by_dir[rel_dir].append(Path(filename).name)
-            processed_paths.add(rel_path)
-
-            if content != "":
-                language = detect_language(file_path)
-                # If language mapping is missing, fall back to the extension itself (if any)
-                if language:
-                    lang_tag = language
-                else:
-                    ext = Path(file_path).suffix.lower().lstrip(".")
-                    lang_tag = ext or ""  # empty if no extension
-                chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
-                all_content.append(chunk)
+    files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(input_dir, config)
 
     total_chars = sum(len(chunk) for chunk in all_content)
-
-    if max_depth > 0:
-        structure = _generate_structure_with_depth(input_dir, processed_paths, extra_dirs)
-        parts: list[str] = []
-        if config.get("export_structure", True):
-            parts.append(structure)
-        if config.get("export_content", True):
-            if parts:
-                parts.append("\n")
-            parts.append("# BEGIN FILE CONTENTS\n\n")
-            parts.append("".join(all_content))
-        full_output = "".join(parts)
-    else:
-        full_output = build_full_output(input_dir, processed_paths, all_content, config)
+    full_output = _build_output(input_dir, processed_paths, all_content, extra_dirs, config)
 
     if create_file:
         output_path = Path(output_file)

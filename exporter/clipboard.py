@@ -17,9 +17,9 @@ except ImportError:
     HAS_PYPERCLIP = False
 
 
-def _get_full_command(cmd: str) -> list[str] | None:
+def _get_command_path(cmd: str) -> str | None:
     """
-    Return full path to the command as a list of arguments.
+    Return full path to the command as a string.
 
     Returns None if command not found.
     Special handling for Windows clip command.
@@ -51,12 +51,12 @@ def _copy_with_pyperclip(text: str) -> bool | None:
 
 def _copy_windows(text: str) -> bool:
     """Copy using Windows clip command."""
-    cmd_list = _get_full_command("clip")
-    if cmd_list is None:
+    cmd_path = _get_command_path("clip")
+    if cmd_path is None:
         return False
     try:
         # Text is trusted (file content), passed via stdin, not shell
-        subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
+        subprocess.run([cmd_path], input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
         error(f"Windows clipboard error: {e}")
         return False
@@ -66,11 +66,11 @@ def _copy_windows(text: str) -> bool:
 
 def _copy_macos(text: str) -> bool:
     """Copy using macOS pbcopy command."""
-    cmd_list = _get_full_command("pbcopy")
-    if cmd_list is None:
+    cmd_path = _get_command_path("pbcopy")
+    if cmd_path is None:
         return False
     try:
-        subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
+        subprocess.run([cmd_path], input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
         error(f"macOS clipboard error: {e}")
         return False
@@ -81,10 +81,11 @@ def _copy_macos(text: str) -> bool:
 def _copy_linux(text: str) -> bool:
     """Copy using Linux xclip or xsel commands."""
     for cmd in ("xclip", "xsel"):
-        cmd_list = _get_full_command(cmd)
-        if cmd_list is None:
+        cmd_path = _get_command_path(cmd)
+        if cmd_path is None:
             continue
 
+        cmd_list = [cmd_path]
         if cmd == "xclip":
             cmd_list.extend(["-selection", "clipboard"])
         else:  # xsel
