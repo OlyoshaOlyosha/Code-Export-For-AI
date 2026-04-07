@@ -261,19 +261,18 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def get_input_directory(args: argparse.Namespace, *, use_args: bool = True) -> str | None:
+def get_input_directory(args: argparse.Namespace) -> str | None:
     """
     Determine input directory based on command line arguments or user interaction.
 
     Args:
         args: Parsed command line arguments.
-        use_args: If True and args.directory is provided, use it; otherwise ask user.
 
     Returns:
         Selected directory path or None if cancelled/invalid.
 
     """
-    if use_args and args.directory:
+    if args.directory:
         if Path(args.directory).is_dir():
             return args.directory
         error("The specified directory does not exist!")
@@ -347,48 +346,42 @@ def main() -> None:
     header(f"{__app_name__} v{__version__}")
 
     args = parse_arguments()
-    first_run = True
 
-    while True:
-        # 1. Choose configuration file (once per loop, may change if user restarts)
-        config_path = select_config_file(args.config if first_run else None)
-        if config_path is None:
-            return
+    # 1. Choose configuration file
+    config_path = select_config_file(args.config)
+    if config_path is None:
+        input("\nPress Enter to exit...")
+        return
 
-        # 2. Load and validate configuration
-        config_dict = load_config(config_path)
+    # 2. Load and validate configuration
+    config_dict = load_config(config_path)
 
-        # Append configuration name (without .py) to output directory
-        config_stem = config_path.stem
-        base_output = Path(config_dict["output_dir"])
-        config_dict["output_dir"] = str(base_output / config_stem)
+    # Append configuration name (without .py) to output directory
+    config_stem = config_path.stem
+    base_output = Path(config_dict["output_dir"])
+    config_dict["output_dir"] = str(base_output / config_stem)
 
-        config_dict = check_export_options(config_dict, config_path)
-        if not config_dict:
-            return
+    config_dict = check_export_options(config_dict, config_path)
+    if not config_dict:
+        input("\nPress Enter to exit...")
+        return
 
-        create_file = config_dict["create_file"]
-        copy_to_buffer = config_dict["copy_to_buffer"]
+    create_file = config_dict["create_file"]
+    copy_to_buffer = config_dict["copy_to_buffer"]
 
-        # 3. Get input directory (use command line arg only on first run)
-        input_dir = get_input_directory(args, use_args=first_run)
-        if not input_dir:
-            return
+    # 3. Get input directory (use command line arg if provided)
+    input_dir = get_input_directory(args)
+    if not input_dir:
+        input("\nPress Enter to exit...")
+        return
 
-        # 4. Determine output filename
-        output_file = get_output_filename(args, config_dict)
+    # 4. Determine output filename
+    output_file = get_output_filename(args, config_dict)
 
-        # 5. Perform the export
-        perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
+    # 5. Perform the export
+    perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
 
-        first_run = False
-
-        # 6. Ask for restart or exit
-        info("\n" + "=" * 50)
-        choice = prompt("Press Enter to exit, or type 'r' to restart: ").strip().lower()
-        if choice != "r":
-            break
-        print()
+    input("\nPress Enter to exit...")
 
 
 if __name__ == "__main__":
