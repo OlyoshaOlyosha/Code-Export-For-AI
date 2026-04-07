@@ -17,11 +17,11 @@ except ImportError:
     HAS_PYPERCLIP = False
 
 
-def _get_command_path(cmd: str) -> str | None:
+def _get_command_path(cmd: str) -> list[str] | None:
     """
-    Return full path to the command as a string.
+    Return the full command path as a single-element list for subprocess.
 
-    Returns None if command not found.
+    Returns None if the command is not found.
     Special handling for Windows clip command.
     """
     if sys.platform == "win32" and cmd == "clip":
@@ -55,8 +55,8 @@ def _copy_windows(text: str) -> bool:
     if cmd_path is None:
         return False
     try:
-        # Text is trusted (file content), passed via stdin, not shell
-        subprocess.run([cmd_path], input=text, text=True, check=True)  # noqa: S603
+        # cmd_path is already a list; do not wrap it again
+        subprocess.run(cmd_path, input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
         error(f"Windows clipboard error: {e}")
         return False
@@ -70,7 +70,8 @@ def _copy_macos(text: str) -> bool:
     if cmd_path is None:
         return False
     try:
-        subprocess.run([cmd_path], input=text, text=True, check=True)  # noqa: S603
+        # cmd_path is already a list; do not wrap it again
+        subprocess.run(cmd_path, input=text, text=True, check=True)  # noqa: S603
     except (OSError, subprocess.SubprocessError) as e:
         error(f"macOS clipboard error: {e}")
         return False
@@ -85,11 +86,11 @@ def _copy_linux(text: str) -> bool:
         if cmd_path is None:
             continue
 
-        cmd_list = [cmd_path]
+        # cmd_path is a list; build the full command by concatenation
         if cmd == "xclip":
-            cmd_list.extend(["-selection", "clipboard"])
+            cmd_list = cmd_path + ["-selection", "clipboard"]
         else:  # xsel
-            cmd_list.extend(["--clipboard", "--input"])
+            cmd_list = cmd_path + ["--clipboard", "--input"]
 
         try:
             subprocess.run(cmd_list, input=text, text=True, check=True)  # noqa: S603
