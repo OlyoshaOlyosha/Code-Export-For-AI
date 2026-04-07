@@ -44,4 +44,14 @@ def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
 
     # File size limit – return True only if size is within limit (or no limit)
     max_size = config.get("max_size")
-    return not (max_size and path.stat().st_size > max_size)
+    if max_size:
+        try:
+            if path.stat().st_size > max_size:
+                return False
+        except OSError as e:
+            # File may be inaccessible or a broken symlink – skip it
+            from exporter.console import warning
+
+            warning(f"Skipping inaccessible file: {file_path} ({e})")
+            return False
+    return True
