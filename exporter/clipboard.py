@@ -132,10 +132,11 @@ def copy_to_clipboard(text: str) -> bool:
         True on success, False otherwise.
 
     """
-    # 1. pyperclip
+    # 1. Try pyperclip
     pyperclip_result = _copy_with_pyperclip(text)
-    if pyperclip_result is not None:
-        return pyperclip_result
+    if pyperclip_result is True:
+        return True
+    # If pyperclip is not available or failed (False), fall through to native tools.
 
-    # 2. Native tools
+    # 2. Fall back to native tools
     return _copy_with_native(text)
