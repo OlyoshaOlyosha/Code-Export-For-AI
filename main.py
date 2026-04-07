@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from exporter.console import error, header, info, prompt, success, warning
+from exporter.console import error, header, info, prompt, warning
 from exporter.processor import export_project
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
@@ -197,16 +197,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
     return config_dict
 
 
-def check_export_options(config_dict: dict[str, Any], config_path: Path) -> dict[str, Any]:
-    """Check and adjust export options if necessary.
+def check_export_options(config_dict: dict[str, Any]) -> dict[str, Any]:
+    """Check and adjust export options for the current run.
 
     - If both file and clipboard outputs are disabled, enables file output.
     - If both structure and content exports are disabled, prompts the user
-      to enable content export. If the user agrees, the configuration file is updated.
+      to enable content export for this session only (no file modification).
 
     Args:
         config_dict: Configuration dictionary.
-        config_path: Path to the configuration file (needed for updating).
 
     Returns:
         The modified configuration dictionary, or an empty dict
@@ -232,26 +231,12 @@ def check_export_options(config_dict: dict[str, Any], config_path: Path) -> dict
         )
 
         if response == "" or response.startswith("y"):
-            try:
-                lines = config_path.read_text(encoding="utf-8").splitlines(keepends=True)
-                new_lines = []
-                for line in lines:
-                    if line.strip().startswith("EXPORT_CONTENT"):
-                        new_lines.append("EXPORT_CONTENT = True    # Include file contents (code) in output\n")
-                    else:
-                        new_lines.append(line)
-                config_path.write_text("".join(new_lines), encoding="utf-8")
-
-                success(f"Updated {config_path.name}: EXPORT_CONTENT set to True permanently.")
-                config_dict["export_content"] = True
-                info("Continuing with code export enabled...\n")
-            except OSError as e:
-                error(f"Failed to update {config_path.name}: {e}")
-                warning("Enabled only for this run.")
-                config_dict["export_content"] = True
+            config_dict["export_content"] = True
+            info("Content export enabled for this run.\n")
         else:
             warning("Exiting — no content to export.")
             return {}
+
     config_dict["create_file"] = create_file
     config_dict["copy_to_buffer"] = copy_to_buffer
     return config_dict
@@ -368,7 +353,7 @@ def main() -> None:
     base_output = Path(config_dict["output_dir"])
     config_dict["output_dir"] = str(base_output / config_stem)
 
-    config_dict = check_export_options(config_dict, config_path)
+    config_dict = check_export_options(config_dict)
     if not config_dict:
         input("\nPress Enter to exit...")
         return
