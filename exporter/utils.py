@@ -4,27 +4,49 @@ This module provides helper functions for directory selection, filename generati
 and statistics printing.
 """
 
-import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog
 
 from exporter.console import info, success
 
 
 def select_directory() -> str | None:
-    """Open a GUI dialog to select a project directory.
+    """Prompt for a project directory via GUI or console fallback.
+
+    First attempts a tkinter folder selection dialog. If tkinter is not available
+    or fails, falls back to manual console input.
 
     Returns:
         The selected directory path or None if no selection was made.
 
     """
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    folder_path = filedialog.askdirectory(title="Select project folder")
-    root.destroy()
-    return folder_path or None
+    # Attempt GUI selection
+    try:
+        import tkinter as tk  # noqa: PLC0415
+        from tkinter import filedialog  # noqa: PLC0415
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        folder_path = filedialog.askdirectory(title="Select project folder")
+        root.destroy()
+        if folder_path:
+            return folder_path
+    except (ImportError, tk.TclError) as e:
+        # tkinter not installed or cannot connect to display
+        warning(f"GUI folder selection unavailable: {e}")
+
+    # Fallback to manual input
+    info("Please enter the project directory path manually:")
+    while True:
+        user_input = input("Path: ").strip()
+        if not user_input:
+            return None
+        path = Path(user_input).expanduser().resolve()
+        if path.is_dir():
+            return str(path)
+        error(f"Directory does not exist or is not accessible: {path}")
+        info("Press Enter to cancel or try again.")
 
 
 def get_next_filename(base_name: str) -> str:
