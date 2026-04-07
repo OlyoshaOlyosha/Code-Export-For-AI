@@ -52,8 +52,8 @@ def select_directory() -> str | None:
 def get_next_filename(base_name: str) -> str:
     """Generate a unique filename by always appending a sequential number.
 
-    The first candidate is `{stem}_1{suffix}`. If it already exists,
-    increments the number until an unused name is found.
+    Scans the parent directory once to find the highest existing numeric suffix,
+    then returns the next number.
 
     Args:
         base_name: The base file path (e.g., "outputs/config/output.txt").
@@ -67,12 +67,20 @@ def get_next_filename(base_name: str) -> str:
     stem = path.stem
     suffix = path.suffix
 
-    counter = 1
-    while True:
-        new_name = parent / f"{stem}_{counter}{suffix}"
-        if not new_name.exists():
-            return str(new_name)
-        counter += 1
+    # Scan directory once to find the maximum existing counter
+    max_counter = 0
+    pattern = f"{stem}_"
+    if parent.exists():
+        for existing in parent.iterdir():
+            name = existing.name
+            if name.startswith(pattern) and name.endswith(suffix):
+                # Extract the numeric part between pattern and suffix
+                middle = name[len(pattern) : -len(suffix)]
+                if middle.isdigit():
+                    max_counter = max(max_counter, int(middle))
+
+    counter = max_counter + 1
+    return str(parent / f"{stem}_{counter}{suffix}")
 
 
 @dataclass
