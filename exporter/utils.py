@@ -28,22 +28,23 @@ def select_directory() -> str | None:
 
 
 def get_next_filename(base_name: str) -> str:
-    """Generate unique filename by adding _1, _2 etc. if needed.
+    """Generate a unique filename by always appending a sequential number.
+
+    The first candidate is `{stem}_1{suffix}`. If it already exists,
+    increments the number until an unused name is found.
 
     Args:
-        base_name: The base filename to check for uniqueness.
+        base_name: The base file path (e.g., "outputs/config/output.txt").
 
     Returns:
-        A unique filename.
+        A unique file path with a numeric suffix (e.g., "outputs/config/output_1.txt").
 
     """
     path = Path(base_name)
-    if not path.exists():
-        return base_name
-
     parent = path.parent
     stem = path.stem
     suffix = path.suffix
+
     counter = 1
     while True:
         new_name = parent / f"{stem}_{counter}{suffix}"

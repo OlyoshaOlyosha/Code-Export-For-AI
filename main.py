@@ -357,6 +357,12 @@ def main() -> None:
 
         # 2. Load and validate configuration
         config_dict = load_config(config_path)
+
+        # Append configuration name (without .py) to output directory
+        config_stem = config_path.stem
+        base_output = Path(config_dict["output_dir"])
+        config_dict["output_dir"] = str(base_output / config_stem)
+
         config_dict = check_export_options(config_dict, config_path)
         if not config_dict:
             return
