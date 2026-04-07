@@ -589,9 +589,13 @@ def export_project(
     full_output = _build_output(input_dir, processed_paths, all_content, extra_dirs, config)
 
     if create_file:
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(full_output, encoding="utf-8")
+        try:
+            output_path = Path(output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(full_output, encoding="utf-8")
+        except OSError as e:
+            error(f"Failed to write output file '{output_file}': {e}")
+            warning("Output file was not created. Continuing with other operations...")
 
     handle_clipboard_copy(full_output, total_chars, copy_to_buffer=copy_to_buffer, config=config)
     return files_by_dir, total_chars
