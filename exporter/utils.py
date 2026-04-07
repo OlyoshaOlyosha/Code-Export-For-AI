@@ -7,7 +7,7 @@ and statistics printing.
 from dataclasses import dataclass
 from pathlib import Path
 
-from exporter.console import info, success
+from exporter.console import error, info, success, warning
 
 
 def select_directory() -> str | None:
