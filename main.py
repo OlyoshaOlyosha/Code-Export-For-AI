@@ -21,16 +21,23 @@ def find_config_files() -> list[Path]:
     Excludes __init__.py and hidden files.
 
     Returns:
-        List of Path objects, sorted alphabetically.
+        List of Path objects, sorted alphabetically. Returns empty list on error.
 
     """
     configs_dir = Path("configs")
     if not configs_dir.is_dir():
         return []
 
-    config_files = [
-        p for p in configs_dir.iterdir() if p.suffix == ".py" and p.name != "__init__.py" and not p.name.startswith(".")
-    ]
+    try:
+        config_files = [
+            p
+            for p in configs_dir.iterdir()
+            if p.suffix == ".py" and p.name != "__init__.py" and not p.name.startswith(".")
+        ]
+    except OSError as e:
+        warning(f"Cannot read 'configs/' directory: {e}")
+        return []
+
     return sorted(config_files)
 
 
