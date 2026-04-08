@@ -22,6 +22,15 @@ BLACKLIST_EXTENSIONS = {
     "bundle.js", "chunk.js",  # Bundled JS
 }
 
+# Extensionless files whitelist
+# Files without a file extension are normally excluded. Add names here to allow them.
+ALLOWED_EXTENSIONLESS_FILES = {
+    "Dockerfile",
+    "Makefile",
+    "README",
+    "LICENSE",
+}
+
 # Directories to completely skip
 BLACKLIST_DIRS = {
     "__pycache__",

@@ -39,7 +39,12 @@ def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
     # Skip files without extension or with blacklisted extension
     blacklist_extensions = config["blacklist_extensions"]
     ext = path.suffix.lower().lstrip(".")
-    if not ext or ext in blacklist_extensions:
+    if not ext:
+        # Extensionless file: include only if its name is in the whitelist
+        allowed_extensionless = config.get("allowed_extensionless_files", set())
+        if filename not in allowed_extensionless:
+            return False
+    elif ext in blacklist_extensions:
         return False
 
     # File size limit – return True only if size is within limit (or no limit)

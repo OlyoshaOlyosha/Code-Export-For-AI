@@ -161,13 +161,16 @@ def load_config(config_path: Path) -> dict[str, Any]:
         "MAX_CLIPBOARD_CHARS": int,
         "MAX_DEPTH": int,
         "USE_GITIGNORE": bool,
+        "ALLOWED_EXTENSIONLESS_FILES": set,
     }
 
     config_dict = {}
     for attr, expected_type in required_attrs.items():
         if not hasattr(module, attr):
-            if attr == "USE_GITIGNORE":
-                config_dict[attr.lower()] = True
+            # Provide defaults for optional settings (backward compatibility)
+            if attr in ("USE_GITIGNORE", "ALLOWED_EXTENSIONLESS_FILES"):
+                default = False if attr == "USE_GITIGNORE" else set()
+                config_dict[attr.lower()] = default
                 continue
             error(f"ERROR: Configuration file is missing required setting: {attr}")
             info("Please ensure the configuration contains all settings from the template.")
