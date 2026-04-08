@@ -160,11 +160,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
         "SHOW_EMPTY_DIRS": bool,
         "MAX_CLIPBOARD_CHARS": int,
         "MAX_DEPTH": int,
+        "USE_GITIGNORE": bool,
     }
 
     config_dict = {}
     for attr, expected_type in required_attrs.items():
         if not hasattr(module, attr):
+            if attr == "USE_GITIGNORE":
+                config_dict[attr.lower()] = True
+                continue
             error(f"ERROR: Configuration file is missing required setting: {attr}")
             info("Please ensure the configuration contains all settings from the template.")
             input("\nPress Enter to exit...")

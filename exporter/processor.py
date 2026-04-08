@@ -5,7 +5,9 @@ project structure generation, and final output formatting.
 """
 
 import os
+import re
 from collections import defaultdict
+from fnmatch import translate as fnmatch_translate
 from pathlib import Path
 from typing import Any
 
@@ -447,6 +449,128 @@ def handle_clipboard_copy(
     return False
 
 
+class GitignoreParser:
+    """Parse .gitignore rules and test paths against them."""
+
+    def __init__(self, gitignore_path: Path, root_dir: Path) -> None:
+        """Read and compile patterns from a .gitignore file.
+
+        Args:
+            gitignore_path: Path to the .gitignore file.
+            root_dir: Root directory of the project (for relative path calculation).
+
+        """
+        self.root_dir = root_dir.resolve()
+        self.patterns: list[tuple[re.Pattern, bool]] = []  # (regex, is_negation)
+
+        if not gitignore_path.is_file():
+            return
+
+        try:
+            lines = gitignore_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+
+        for raw_line in lines:
+            line = raw_line.rstrip("\r\n")
+            # Skip comments and empty lines
+            if not line or line.startswith("#"):
+                continue
+
+            is_negation = False
+            if line.startswith("!"):
+                is_negation = True
+                line = line[1:]
+
+            # Remove trailing spaces (not allowed in patterns)
+            line = line.rstrip()
+
+            # Handle directory indicator (trailing slash)
+            # For matching we treat it as "this pattern only applies to directories"
+            # but our simple implementation treats paths uniformly.
+            line = line.removesuffix("/")
+
+            # Convert gitignore pattern to regex
+            regex = self._pattern_to_regex(line)
+            self.patterns.append((re.compile(regex), is_negation))
+
+    @staticmethod
+    def _pattern_to_regex(pattern: str) -> str:
+        """Convert a gitignore pattern to a regular expression."""
+        # If pattern contains '/', it's anchored to the directory containing .gitignore
+        # Otherwise it matches anywhere in the path.
+        if "/" in pattern and not pattern.startswith("**/"):
+            # Anchored relative to gitignore location
+            anchored = True
+        else:
+            anchored = False
+
+        # Handle leading "**/"
+        if pattern.startswith("**/"):
+            pattern = pattern[3:]
+            anchored = False  # "**/" means any number of directories
+
+        # Convert glob pattern to regex using fnmatch, then adjust
+        # fnmatch.translate uses '(?s:...)\Z' – we strip the end anchor and add our own.
+        parts = pattern.split("/")
+        regex_parts = []
+        for part in parts:
+            if part == "**":
+                regex_parts.append(r"(?:.*/)?")
+            else:
+                # Escape then translate glob
+                part_regex = fnmatch_translate(part)
+                # fnmatch_translate returns '(?s:pattern)\Z'
+                # Strip the '(?s:' prefix and ')\Z' suffix
+                if part_regex.startswith("(?s:") and part_regex.endswith(")\\Z"):
+                    part_regex = part_regex[4:-3]
+                else:
+                    # Fallback: just escape special regex chars except *
+                    part_regex = re.escape(part).replace(r"\*", ".*")
+                regex_parts.append(part_regex)
+
+        joined = "/".join(regex_parts)
+
+        if anchored:
+            # Must match from the start of the relative path
+            return f"^{joined}(/.*)?$"
+        # Can match anywhere in the relative path
+        return f"(?:^|.*/){joined}(/.*)?$"
+
+    def is_ignored(self, rel_path: str, is_dir: bool = False) -> bool:
+        """Return True if the path should be ignored according to parsed rules.
+
+        Args:
+            rel_path: Relative path from project root (using POSIX separators).
+            is_dir: Whether the path represents a directory.
+
+        Returns:
+            True if the path should be excluded.
+
+        """
+        ignored = False
+        for regex, is_negation in self.patterns:
+            if regex.search(rel_path):
+                ignored = not is_negation
+        return ignored
+
+
+def _load_gitignore_parser(root_dir: Path) -> GitignoreParser | None:
+    """Create a GitignoreParser for the given root directory if .gitignore exists.
+
+    Args:
+        root_dir: Project root directory.
+
+    Returns:
+        GitignoreParser instance or None if .gitignore is missing/unreadable.
+
+    """
+    gitignore_path = root_dir / ".gitignore"
+    if gitignore_path.is_file():
+        return GitignoreParser(gitignore_path, root_dir)
+    return None
+
+
 def _collect_files(
     input_dir: str,
     config: dict[str, Any],
@@ -474,12 +598,28 @@ def _collect_files(
     max_depth = config.get("max_depth", -1)  # -1 = unlimited, 0 = only root, >0 = limited
     input_path = Path(input_dir)
 
+    # Load .gitignore parser if enabled
+    gitignore_parser = None
+    if config.get("use_gitignore", False):
+        gitignore_parser = _load_gitignore_parser(input_path)
+        if gitignore_parser is None:
+            warning("USE_GITIGNORE is True but .gitignore not found in project root. Continuing without it.")
+
     for root, dirs, files in os.walk(input_dir):
         rel_root = Path(root).relative_to(input_dir).as_posix()
         depth = 0 if rel_root == "." else len(Path(rel_root).parts)
 
         # Filter out blacklisted and hidden directories
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
+
+        # Apply .gitignore filtering to directories
+        if gitignore_parser is not None:
+            filtered_dirs = []
+            for d in dirs:
+                dir_rel_path = (Path(root) / d).relative_to(input_path).as_posix()
+                if not gitignore_parser.is_ignored(dir_rel_path, is_dir=True):
+                    filtered_dirs.append(d)
+            dirs[:] = filtered_dirs
 
         # Apply depth limit (-1 means unlimited)
         if max_depth != -1:
@@ -493,6 +633,11 @@ def _collect_files(
 
         for filename in files:
             file_path = Path(root) / filename
+            rel_path = file_path.relative_to(input_path).as_posix()
+
+            # Apply .gitignore filtering to files
+            if gitignore_parser is not None and gitignore_parser.is_ignored(rel_path, is_dir=False):
+                continue
 
             if not is_code_file(str(file_path), config):
                 continue
@@ -504,7 +649,6 @@ def _collect_files(
             if not config.get("include_empty_files", True) and content == "":
                 continue
 
-            rel_path = file_path.relative_to(input_path).as_posix()
             rel_dir = Path(rel_path).parent.as_posix()
             files_by_dir[rel_dir].append(filename)
             processed_paths.add(rel_path)

@@ -76,3 +76,6 @@ MAX_CLIPBOARD_CHARS = 500000  # Maximum characters to copy to clipboard (0 to di
 
 # Directory traversal depth
 MAX_DEPTH = -1  # -1 = unlimited, 0 = only selected directory, positive integer = max depth
+
+# .gitignore integration
+USE_GITIGNORE = True  # If True, also respect .gitignore rules (in addition to blacklists)
