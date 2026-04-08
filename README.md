@@ -20,17 +20,18 @@ Tool to export any project folder or repository into a single, neatly formatted 
 
 ## Features
 - Recursively scans a directory and collects source files.
-- Configurable ignore rules for directories, filenames and extensions (`config.py`).
+- **Multiple configuration profiles** – place `.py` config files in the `configs/` folder and select one at startup.
+- Configurable ignore rules for directories, filenames and extensions (per configuration).
 - Filename filtering with exact or partial matching (`FILENAME_FILTER_MODE`).
+- **.gitignore integration** – automatically respect `.gitignore` rules when `USE_GITIGNORE = True` (reads the `.gitignore` located in the project root).
+- **Depth limit** – restrict recursion depth with `MAX_DEPTH` (useful for large monorepos).
+- Whitelist for extensionless files (e.g., `Dockerfile`, `Makefile`).
 - Export project directory structure (ASCII tree) and file contents separately.
 - Option to show empty directories in the structure (`SHOW_EMPTY_DIRS`) and include empty files (only in structure, no code block, `INCLUDE_EMPTY_FILES`).
 - Save output to a file and/or copy to the clipboard.
-- Automatic unique filename generation when output file already exists.
 - Clipboard safety limit to avoid pasting huge amounts of text accidentally.
 - Print simple statistics (file count, characters, runtime).
 - Works with CLI or GUI folder picker (Tkinter).
-- Interactive mode – restart export without retyping paths.
-- If both structure and content export are disabled, the tool asks whether to enable content export and updates `config.py` automatically.
 
 ## Installation / Requirements
 - Python 3.10 or higher (recommended).
@@ -60,15 +61,20 @@ pip install pyperclip
 python main.py
 ```
 
-Or provide a folder and output file directly:
+Or provide a folder, output file, and configuration directly:
 
 ```powershell
-python main.py -d "C:\path\to\project" -o export.txt
+python main.py -d "C:\path\to\project" -o export.txt -c python
 ```
 
-3. If you run without `-d`, a folder selection dialog opens. The script will create `output.txt` inside the `outputs/` folder by default and may copy the content to the clipboard if enabled. Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
+- `-d, --directory` – path to project folder (if omitted, a GUI folder picker opens).
+- `-o, --output` – output filename (relative to `OUTPUT_DIR/config_name/`).
+- `-c, --config` – name of a configuration file from the `configs/` folder (e.g., `python` for `configs/python.py`). If omitted, the tool will:
+  - automatically use the only config if exactly one `.py` file exists in `configs/`,
+  - show a numbered selection menu if multiple configs are present,
+  - fall back to `config.py` in the project root if `configs/` is empty.
 
-After export, the tool asks whether to restart (type `r`) or exit (press Enter). This lets you quickly process another folder without re‑entering the path.
+Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
 
 ## Sample output
 Each file is exported with a relative path header followed by a fenced code block. Example:
@@ -114,16 +120,23 @@ def main():
 When `INCLUDE_EMPTY_FILES` is enabled (default), empty files are shown in the structure but have no code block. When `SHOW_EMPTY_DIRS` is enabled, empty directories are also shown.
 
 ## Configuration
-The script **requires** a valid `config.py` file in the same folder. It will not run without it. Copy the example `config.py` from the repository and adjust it as needed. Key options:
+The script expects configuration files inside the `configs/` folder (or a legacy `config.py` in the project root). Copy the example `config.py` from the repository into `configs/` and adjust it as needed. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and switch between them using the `-c` flag.
+
+**Note on output location:** The final output is saved in a subdirectory named after the configuration file (without `.py`) inside `OUTPUT_DIR`. For example, if `OUTPUT_DIR = "outputs"` and you use `python.py`, the file will be placed in `outputs/python/`.
+
+Key options (inside a `.py` config file):
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `BLACKLIST_EXTENSIONS` | Set of extensions (e.g., `"png"`, `"jpg"`, `"txt"`, `"md"`, `"log"`, `"pyc"`) | File extensions to ignore. |
+| `ALLOWED_EXTENSIONLESS_FILES` | `{"Dockerfile", "Makefile", "README", "LICENSE"}` | Filenames without extension that should be included. |
 | `BLACKLIST_DIRS` | Set of directory names | Directories to skip (e.g., `node_modules`, `.git`, `__pycache__`). |
 | `BLACKLIST_FILENAMES` | Set of filenames | Specific filenames to ignore. |
 | `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
-| `OUTPUT_DIR` | `"outputs"` | Default directory where output files are saved. |
-| `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR`). |
+| `USE_GITIGNORE` | `True` | If `True`, also respect `.gitignore` rules in addition to blacklists. The `.gitignore` file must be in the root of the exported project. |
+| `MAX_DEPTH` | `-1` | Maximum recursion depth: `-1` = unlimited, `0` = only selected directory, positive integer = max depth. |
+| `OUTPUT_DIR` | `"outputs"` | Base directory where output files are saved. A subfolder with the configuration name will be created automatically. |
+| `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR/config_name/`). |
 | `MAX_FILE_SIZE_MB` | `5` | Maximum file size to include (in MB). |
 | `CREATE_FILE` | `True` | Whether to write the output file. |
 | `COPY_TO_CLIPBOARD` | `True` | Whether to copy result to clipboard. |
@@ -133,16 +146,16 @@ The script **requires** a valid `config.py` file in the same folder. It will not
 | `INCLUDE_EMPTY_FILES` | `True` | When `EXPORT_CONTENT` is `True`, include empty files (only in structure, no code block). |
 | `MAX_CLIPBOARD_CHARS` | `500000` | Maximum characters to copy to clipboard; set to `0` to disable the limit. |
 
-> **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will ask whether to enable `EXPORT_CONTENT` for this run and automatically update `config.py` for future runs.
+> **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will ask whether to enable `EXPORT_CONTENT` for this run and automatically update the configuration file for future runs.
 
 Language detection for code fences is based on file extension using a built-in mapping (e.g., `.py` → `python`, `.js` → `javascript`). The mapping can be extended by editing the `EXTENSION_LANGUAGE_MAP` dictionary in `exporter/processor.py` if needed.
 
 ## Tips
-- For large repositories, increase `MAX_FILE_SIZE_MB` or run on a subset of folders.
+- For large repositories, increase `MAX_FILE_SIZE_MB` or use `MAX_DEPTH` to limit traversal.
 - If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed or install `pyperclip`.
-- To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in `config.py`.
+- To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in your configuration.
 - If the output is too large for the clipboard, increase `MAX_CLIPBOARD_CHARS` or set it to `0`.
-- The tool automatically generates a unique filename (e.g., `output_1.txt`) if the default file already exists.
+- Create multiple configuration files in `configs/` for different project types (e.g., Python-only, frontend-only) and switch with `-c`.
 
 ## Contributing
 Improvements welcome — open an issue or submit a pull request.
