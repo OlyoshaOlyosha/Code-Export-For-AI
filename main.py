@@ -341,7 +341,7 @@ def perform_export(
 
     elapsed_time = time.time() - start_time
     output_info = OutputInfo(output_file, create_file, copy_to_buffer)
-    print_statistics(files_by_dir, total_chars, elapsed_time, output_info)
+    print_statistics(files_by_dir, total_chars, elapsed_time, output_info, input_dir)
 
 
 def main() -> None:

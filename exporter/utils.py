@@ -92,11 +92,63 @@ class OutputInfo:
     copy_to_buffer: bool
 
 
+def _build_file_tree(files_by_dir: dict[str, list[str]], root_name: str) -> str:
+    """Build an ASCII tree representation of files grouped by directory.
+
+    Args:
+        files_by_dir: Mapping from relative directory paths to lists of filenames.
+        root_name: Name of the project root directory.
+
+    Returns:
+        A string containing the formatted tree.
+
+    """
+    # Build nested dictionary structure
+    tree: dict = {}
+    for rel_dir, filenames in files_by_dir.items():
+        # Normalize path separators and handle root '.' case
+        if rel_dir == ".":
+            parts = []
+        else:
+            parts = rel_dir.replace("\\", "/").split("/")
+        current = tree
+        for part in parts:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current["__files__"] = sorted(filenames)
+
+    def render_node(node: dict, prefix: str = "") -> list[str]:
+        lines = []
+        dirs = [k for k in node if k != "__files__"]
+        files = node.get("__files__", [])
+        items = sorted(dirs) + files
+        if not items:
+            return lines
+
+        pointers = ["├── "] * (len(items) - 1) + (["└── "] if items else [])
+        for i, name in enumerate(items):
+            pointer = pointers[i]
+            is_dir = name in dirs
+            line = f"{prefix}{pointer}{name}{'/' if is_dir else ''}"
+            lines.append(line)
+            if is_dir:
+                extension = "    " if pointer == "└── " else "│   "
+                lines.extend(render_node(node[name], prefix + extension))
+        return lines
+
+    root_line = f"{root_name}/"
+    lines = [root_line]
+    lines.extend(render_node(tree))
+    return "\n".join(lines)
+
+
 def print_statistics(
     files_by_dir: dict[str, list[str]],
     total_chars: int,
     elapsed_time: float,
     output_info: OutputInfo,
+    input_dir: str,
 ) -> None:
     """Print formatted statistics after export.
 
@@ -105,10 +157,12 @@ def print_statistics(
         total_chars: Total number of characters in the exported content.
         elapsed_time: Time taken for the export process.
         output_info: OutputInfo object containing output file and flags.
+        input_dir: Path to the project root directory (used for tree label).
 
     """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
+    root_name = Path(input_dir).name
 
     info("\n=== STATISTICS ===")
     info(f"Elapsed time: {elapsed_time:.2f} sec")
@@ -117,9 +171,10 @@ def print_statistics(
     info(f"Files: {num_files}")
 
     info("\nFiles by directory:")
-    for dir_path in sorted(files_by_dir.keys()):
-        files = files_by_dir[dir_path]
-        info(f"  {dir_path}: {len(files)} - {', '.join(files)}")
+    tree_output = _build_file_tree(files_by_dir, root_name)
+    # Print each line individually to maintain proper indentation in console
+    for line in tree_output.splitlines():
+        info(line)
 
     result_parts = []
     if output_info.create_file:
