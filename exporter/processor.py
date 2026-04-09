@@ -726,7 +726,7 @@ def export_project(
     *,
     create_file: bool = True,
     copy_to_buffer: bool = False,
-) -> tuple[dict[str, list[str]], int]:
+) -> tuple[dict[str, list[str]], int, str]:
     """Export project: collect files, build output, write to file and/or copy to clipboard.
 
     Args:
@@ -740,6 +740,7 @@ def export_project(
         Tuple containing:
             - files_by_dir: Dictionary mapping directories to lists of file names.
             - total_chars: Total number of characters in the exported content.
+            - full_output: The complete exported text (used for statistics/token count).
 
     """
     files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(input_dir, config)
@@ -757,4 +758,4 @@ def export_project(
             warning("Output file was not created. Continuing with other operations...")
 
     handle_clipboard_copy(full_output, total_chars, copy_to_buffer=copy_to_buffer, config=config)
-    return files_by_dir, total_chars
+    return files_by_dir, total_chars, full_output

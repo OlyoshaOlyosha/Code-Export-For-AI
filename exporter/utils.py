@@ -7,6 +7,8 @@ and statistics printing.
 from dataclasses import dataclass
 from pathlib import Path
 
+import tiktoken
+
 from exporter.console import error, info, success, warning
 
 
@@ -149,6 +151,7 @@ def print_statistics(
     elapsed_time: float,
     output_info: OutputInfo,
     input_dir: str,
+    full_output: str,
 ) -> None:
     """Print formatted statistics after export.
 
@@ -158,15 +161,20 @@ def print_statistics(
         elapsed_time: Time taken for the export process.
         output_info: OutputInfo object containing output file and flags.
         input_dir: Path to the project root directory (used for tree label).
+        full_output: The complete exported text (used for token counting).
 
     """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
     root_name = Path(input_dir).name
 
+    enc = tiktoken.get_encoding("o200k_base")
+    token_count = len(enc.encode(full_output))
+
     info("\n=== STATISTICS ===")
     info(f"Elapsed time: {elapsed_time:.2f} sec")
     info(f"Characters: {total_chars:,} ({total_chars / 1024:.1f} KB)")
+    info(f"Tokens: ~{token_count:,}")
     info(f"Directories: {num_dirs}")
     info(f"Files: {num_files}")
 
