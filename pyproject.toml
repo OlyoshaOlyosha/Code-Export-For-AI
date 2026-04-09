@@ -22,6 +22,7 @@ ignore = [
     "ANN204",  # Missing return type for special methods (__init__)
     "PERF203", # try-except in loop - acceptable for file operations, would complicate code
     "FBT003",  # Boolean positional value in function call - Tkinter APIs require boolean literals
+    "PLR2004",  # Magic value comparison
 ]
 
 [tool.ruff.lint.per-file-ignores]

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import tiktoken
 
-from exporter.console import error, info, success, warning
+from exporter.console import Fore, Style, error, info, success, warning
 
 
 def select_directory() -> str | None:
@@ -171,18 +171,63 @@ def print_statistics(
     enc = tiktoken.get_encoding("o200k_base")
     token_count = len(enc.encode(full_output))
 
+    if total_chars >= 1024 * 1024:
+        size_str = f"{total_chars / (1024 * 1024):.2f} MB"
+    else:
+        size_str = f"{total_chars / 1024:.1f} KB"
+
     info("\n=== STATISTICS ===")
-    info(f"Elapsed time: {elapsed_time:.2f} sec")
-    info(f"Characters: {total_chars:,} ({total_chars / 1024:.1f} KB)")
-    info(f"Tokens: ~{token_count:,}")
-    info(f"Directories: {num_dirs}")
-    info(f"Files: {num_files}")
+
+    if elapsed_time < 1.0:
+        time_color = Fore.GREEN
+    elif elapsed_time < 5.0:
+        time_color = Fore.YELLOW
+    else:
+        time_color = Fore.RED
+    info(f"Elapsed time: {time_color}{elapsed_time:.2f} sec{Style.RESET_ALL}")
+
+    info(f"Characters: {total_chars:,} ({size_str})")
+
+    CONTEXT_LIMIT = 128_000  # tokens
+    percentage = (token_count / CONTEXT_LIMIT) * 100
+    if percentage < 50:
+        token_color = Fore.GREEN
+    elif percentage < 80:
+        token_color = Fore.YELLOW
+    elif percentage < 95:
+        token_color = Fore.LIGHTYELLOW_EX
+    else:
+        token_color = Fore.RED
+    info(f"Tokens: ~{token_color}{token_count:,}{Style.RESET_ALL} / {CONTEXT_LIMIT:,} ({percentage:.1f}%)")
+
+    info(f"📁 Directories: {num_dirs}")
+    info(f"📄 Files: {num_files}")
 
     info("\nFiles by directory:")
+
     tree_output = _build_file_tree(files_by_dir, root_name)
-    # Print each line individually to maintain proper indentation in console
     for line in tree_output.splitlines():
-        info(line)
+        if line.rstrip().endswith("/"):
+            last_slash_idx = line.rfind("/")
+            if last_slash_idx != -1:
+                name_start = 0
+                for i, ch in enumerate(line):
+                    if ch not in (" ", "├", "└", "│", "─"):
+                        name_start = i
+                        break
+                prefix = line[:name_start]
+                name_with_slash = line[name_start:]
+                if name_with_slash.endswith("/"):
+                    name_only = name_with_slash[:-1]
+                    slash = "/"
+                else:
+                    name_only = name_with_slash
+                    slash = ""
+                print(f"{prefix}{Fore.BLUE}{name_only}{Style.RESET_ALL}{slash}")
+            else:
+                print(f"{Fore.BLUE}{line}{Style.RESET_ALL}")
+        else:
+            print(line)
 
     result_parts = []
     if output_info.create_file:
