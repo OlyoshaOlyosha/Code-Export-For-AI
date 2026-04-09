@@ -642,18 +642,33 @@ def _collect_files(
             if not is_code_file(str(file_path), config):
                 continue
 
-            content = read_file_content(str(file_path))
-            if content is None:
-                continue
+            export_content = config.get("export_content", True)
+            include_empty = config.get("include_empty_files", True)
 
-            if not config.get("include_empty_files", True) and content == "":
-                continue
+            # When content export is disabled we avoid reading the whole file.
+            if export_content:
+                content = read_file_content(str(file_path))
+                if content is None:
+                    continue
+                if not include_empty and content == "":
+                    continue
+            else:
+                # Determine emptiness via file size – fast and avoids I/O.
+                try:
+                    is_empty = file_path.stat().st_size == 0
+                except OSError:
+                    # Inaccessible file – skip it.
+                    continue
+                if not include_empty and is_empty:
+                    continue
+                content = ""  # not used, but keeps variable defined
 
             rel_dir = Path(rel_path).parent.as_posix()
             files_by_dir[rel_dir].append(filename)
             processed_paths.add(rel_path)
 
-            if content:
+            # Build content chunk only if content export is enabled.
+            if export_content and content:
                 language = detect_language(str(file_path))
                 lang_tag = language or Path(file_path).suffix.lower().lstrip(".")
                 chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
@@ -729,8 +744,8 @@ def export_project(
     """
     files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(input_dir, config)
 
-    total_chars = sum(len(chunk) for chunk in all_content)
     full_output = _build_output(input_dir, processed_paths, all_content, extra_dirs, config)
+    total_chars = len(full_output)
 
     if create_file:
         try:
