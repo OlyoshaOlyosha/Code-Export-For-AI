@@ -5,11 +5,11 @@ project structure generation, and final output formatting.
 """
 
 import os
-import re
 from collections import defaultdict
-from fnmatch import translate as fnmatch_translate
 from pathlib import Path
 from typing import Any
+
+from pathspec import PathSpec
 
 from exporter.clipboard import copy_to_clipboard
 from exporter.console import error, success, warning
@@ -145,6 +145,27 @@ EXTENSION_LANGUAGE_MAP: dict[str, str] = {
 }
 
 
+def _load_gitignore_spec(root_dir: Path) -> PathSpec | None:
+    """Load .gitignore patterns into a PathSpec object.
+
+    Args:
+        root_dir: Project root directory.
+
+    Returns:
+        PathSpec instance if .gitignore exists and is readable, else None.
+
+    """
+    gitignore_path = root_dir / ".gitignore"
+    if not gitignore_path.is_file():
+        return None
+    try:
+        lines = gitignore_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    spec = PathSpec.from_lines("gitwildmatch", lines)
+    return spec
+
+
 def read_file_content(file_path: str) -> str | None:
     """Read file content with fallback encodings.
 
@@ -171,16 +192,24 @@ def read_file_content(file_path: str) -> str | None:
     return None
 
 
-def _generate_structure_with_empty_dirs(input_dir: str, processed_paths: set[str], config: dict[str, Any]) -> str:
+def _generate_structure_with_empty_dirs(
+    input_dir: str,
+    processed_paths: set[str],
+    config: dict[str, Any],
+    gitignore_spec: PathSpec | None = None,
+) -> str:
     """Generate project tree including all directories (even empty) from actual filesystem.
 
-    Directories are filtered according to blacklist_dirs and hidden directories (starting with '.').
+    Directories are filtered according to blacklist_dirs, hidden directories (starting with '.'),
+    and optionally .gitignore rules (via gitignore_spec).
+
     Only exported files (from processed_paths) are shown as leaves.
 
     Args:
         input_dir: Path to the input directory.
         processed_paths: Set of relative paths of exported files.
         config: Configuration dictionary with 'blacklist_dirs'.
+        gitignore_spec: Compiled .gitignore patterns, or None to skip.
 
     Returns:
         ASCII tree string.
@@ -193,7 +222,16 @@ def _generate_structure_with_empty_dirs(input_dir: str, processed_paths: set[str
     dir_tree = {}  # root node representing contents of input_dir
 
     for root, dirs, _ in os.walk(input_dir):
+        # Filter out hidden and blacklisted directories
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in blacklist_dirs]
+
+        # Apply .gitignore filtering to directories (trailing slash required)
+        if gitignore_spec is not None:
+            dirs[:] = [
+                d
+                for d in dirs
+                if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_dir).as_posix()}/")
+            ]
 
         rel_root = Path(root).relative_to(input_dir).as_posix()
         if rel_root == ".":
@@ -317,20 +355,26 @@ def _generate_structure_with_depth(
     return "\n".join(lines)
 
 
-def generate_project_structure(input_dir: str, processed_paths: set[str], config: dict[str, Any]) -> str:
+def generate_project_structure(
+    input_dir: str,
+    processed_paths: set[str],
+    config: dict[str, Any],
+    gitignore_spec: PathSpec | None = None,
+) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
     Args:
         input_dir: Path to the input directory.
         processed_paths: Set of relative paths that were processed.
         config: Configuration dictionary (used for show_empty_dirs flag).
+        gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
 
     Returns:
         A string representation of the project structure as an ASCII tree.
 
     """
     if config.get("show_empty_dirs", False):
-        return _generate_structure_with_empty_dirs(input_dir, processed_paths, config)
+        return _generate_structure_with_empty_dirs(input_dir, processed_paths, config, gitignore_spec)
 
     # Original method (without empty dirs)
     root = {}
@@ -384,6 +428,7 @@ def build_full_output(
     processed_paths: set[str],
     all_content: list[str],
     config: dict[str, Any],
+    gitignore_spec: PathSpec | None = None,
 ) -> str:
     """Build the complete output: project structure (if enabled) and file contents.
 
@@ -392,6 +437,7 @@ def build_full_output(
         processed_paths: Set of relative paths of processed files.
         all_content: List of strings with file contents (formatted with syntax highlighting).
         config: Configuration dictionary.
+        gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
 
     Returns:
         The complete output string to be written or copied.
@@ -400,7 +446,7 @@ def build_full_output(
     parts: list[str] = []
 
     if config.get("export_structure", True):
-        structure = generate_project_structure(input_dir, processed_paths, config)
+        structure = generate_project_structure(input_dir, processed_paths, config, gitignore_spec)
         parts.append(structure)
 
     if config.get("export_content", True):
@@ -449,131 +495,10 @@ def handle_clipboard_copy(
     return False
 
 
-class GitignoreParser:
-    """Parse .gitignore rules and test paths against them."""
-
-    def __init__(self, gitignore_path: Path, root_dir: Path) -> None:
-        """Read and compile patterns from a .gitignore file.
-
-        Args:
-            gitignore_path: Path to the .gitignore file.
-            root_dir: Root directory of the project (for relative path calculation).
-
-        """
-        self.root_dir = root_dir.resolve()
-        self.patterns: list[tuple[re.Pattern, bool]] = []  # (regex, is_negation)
-
-        if not gitignore_path.is_file():
-            return
-
-        try:
-            lines = gitignore_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return
-
-        for raw_line in lines:
-            line = raw_line.rstrip("\r\n")
-            # Skip comments and empty lines
-            if not line or line.startswith("#"):
-                continue
-
-            is_negation = False
-            if line.startswith("!"):
-                is_negation = True
-                line = line[1:]
-
-            # Remove trailing spaces (not allowed in patterns)
-            line = line.rstrip()
-
-            # Handle directory indicator (trailing slash)
-            # For matching we treat it as "this pattern only applies to directories"
-            # but our simple implementation treats paths uniformly.
-            line = line.removesuffix("/")
-
-            # Convert gitignore pattern to regex
-            regex = self._pattern_to_regex(line)
-            self.patterns.append((re.compile(regex), is_negation))
-
-    @staticmethod
-    def _pattern_to_regex(pattern: str) -> str:
-        """Convert a gitignore pattern to a regular expression."""
-        # If pattern contains '/', it's anchored to the directory containing .gitignore
-        # Otherwise it matches anywhere in the path.
-        if "/" in pattern and not pattern.startswith("**/"):
-            # Anchored relative to gitignore location
-            anchored = True
-        else:
-            anchored = False
-
-        # Handle leading "**/"
-        if pattern.startswith("**/"):
-            pattern = pattern[3:]
-            anchored = False  # "**/" means any number of directories
-
-        # Convert glob pattern to regex using fnmatch, then adjust
-        # fnmatch.translate uses '(?s:...)\Z' – we strip the end anchor and add our own.
-        parts = pattern.split("/")
-        regex_parts = []
-        for part in parts:
-            if part == "**":
-                regex_parts.append(r"(?:.*/)?")
-            else:
-                # Escape then translate glob
-                part_regex = fnmatch_translate(part)
-                # fnmatch_translate returns '(?s:pattern)\Z'
-                # Strip the '(?s:' prefix and ')\Z' suffix
-                if part_regex.startswith("(?s:") and part_regex.endswith(")\\Z"):
-                    part_regex = part_regex[4:-3]
-                else:
-                    # Fallback: just escape special regex chars except *
-                    part_regex = re.escape(part).replace(r"\*", ".*")
-                regex_parts.append(part_regex)
-
-        joined = "/".join(regex_parts)
-
-        if anchored:
-            # Must match from the start of the relative path
-            return f"^{joined}(/.*)?$"
-        # Can match anywhere in the relative path
-        return f"(?:^|.*/){joined}(/.*)?$"
-
-    def is_ignored(self, rel_path: str, is_dir: bool = False) -> bool:
-        """Return True if the path should be ignored according to parsed rules.
-
-        Args:
-            rel_path: Relative path from project root (using POSIX separators).
-            is_dir: Whether the path represents a directory.
-
-        Returns:
-            True if the path should be excluded.
-
-        """
-        ignored = False
-        for regex, is_negation in self.patterns:
-            if regex.search(rel_path):
-                ignored = not is_negation
-        return ignored
-
-
-def _load_gitignore_parser(root_dir: Path) -> GitignoreParser | None:
-    """Create a GitignoreParser for the given root directory if .gitignore exists.
-
-    Args:
-        root_dir: Project root directory.
-
-    Returns:
-        GitignoreParser instance or None if .gitignore is missing/unreadable.
-
-    """
-    gitignore_path = root_dir / ".gitignore"
-    if gitignore_path.is_file():
-        return GitignoreParser(gitignore_path, root_dir)
-    return None
-
-
 def _collect_files(
     input_dir: str,
     config: dict[str, Any],
+    gitignore_spec: PathSpec | None = None,
 ) -> tuple[defaultdict[str, list[str]], list[str], set[str], set[str]]:
     """Collect files during directory traversal respecting depth limit.
 
@@ -581,6 +506,7 @@ def _collect_files(
         input_dir: Path to the project root.
         config: Configuration dictionary containing 'max_depth', 'blacklist_dirs',
             'include_empty_files', etc.
+        gitignore_spec: Compiled .gitignore patterns (PathSpec from pathspec), or None.
 
     Returns:
         Tuple of:
@@ -598,13 +524,6 @@ def _collect_files(
     max_depth = config.get("max_depth", -1)  # -1 = unlimited, 0 = only root, >0 = limited
     input_path = Path(input_dir)
 
-    # Load .gitignore parser if enabled
-    gitignore_parser = None
-    if config.get("use_gitignore", False):
-        gitignore_parser = _load_gitignore_parser(input_path)
-        if gitignore_parser is None:
-            warning("USE_GITIGNORE is True but .gitignore not found in project root. Continuing without it.")
-
     for root, dirs, files in os.walk(input_dir):
         rel_root = Path(root).relative_to(input_dir).as_posix()
         depth = 0 if rel_root == "." else len(Path(rel_root).parts)
@@ -612,14 +531,13 @@ def _collect_files(
         # Filter out blacklisted and hidden directories
         dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
 
-        # Apply .gitignore filtering to directories
-        if gitignore_parser is not None:
-            filtered_dirs = []
-            for d in dirs:
-                dir_rel_path = (Path(root) / d).relative_to(input_path).as_posix()
-                if not gitignore_parser.is_ignored(dir_rel_path, is_dir=True):
-                    filtered_dirs.append(d)
-            dirs[:] = filtered_dirs
+        # Apply .gitignore filtering to directories (PathSpec requires trailing slash)
+        if gitignore_spec is not None:
+            dirs[:] = [
+                d
+                for d in dirs
+                if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_path).as_posix()}/")
+            ]
 
         # Apply depth limit (-1 means unlimited)
         if max_depth != -1:
@@ -636,7 +554,7 @@ def _collect_files(
             rel_path = file_path.relative_to(input_path).as_posix()
 
             # Apply .gitignore filtering to files
-            if gitignore_parser is not None and gitignore_parser.is_ignored(rel_path, is_dir=False):
+            if gitignore_spec is not None and gitignore_spec.match_file(rel_path):
                 continue
 
             if not is_code_file(str(file_path), config):
@@ -683,6 +601,7 @@ def _build_output(
     all_content: list[str],
     extra_dirs: set[str],
     config: dict[str, Any],
+    gitignore_spec: PathSpec | None = None,
 ) -> str:
     """Build the final output string, respecting the configured depth limit.
 
@@ -696,6 +615,7 @@ def _build_output(
         all_content: List of formatted file content chunks.
         extra_dirs: Directories that were truncated because of depth limit.
         config: Configuration dictionary.
+        gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
 
     Returns:
         Complete output string (structure + contents).
@@ -704,7 +624,7 @@ def _build_output(
     max_depth = config.get("max_depth", -1)
     if max_depth == -1:
         # Unlimited depth: use the full output (respects SHOW_EMPTY_DIRS)
-        return build_full_output(input_dir, processed_paths, all_content, config)
+        return build_full_output(input_dir, processed_paths, all_content, config, gitignore_spec)
 
     # Depth is limited (0 = only root, >0 = limited)
     structure = _generate_structure_with_depth(input_dir, processed_paths, extra_dirs)
@@ -743,9 +663,22 @@ def export_project(
             - full_output: The complete exported text (used for statistics/token count).
 
     """
-    files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(input_dir, config)
+    input_path = Path(input_dir).resolve()
 
-    full_output = _build_output(input_dir, processed_paths, all_content, extra_dirs, config)
+    # Load .gitignore spec if enabled
+    gitignore_spec: PathSpec | None = None
+    if config.get("use_gitignore", False):
+        gitignore_spec = _load_gitignore_spec(input_path)
+        if gitignore_spec is None:
+            warning("USE_GITIGNORE is True but .gitignore not found in project root. Continuing without it.")
+
+    files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(
+        input_dir, config, gitignore_spec=gitignore_spec
+    )
+
+    full_output = _build_output(
+        input_dir, processed_paths, all_content, extra_dirs, config, gitignore_spec=gitignore_spec
+    )
     total_chars = len(full_output)
 
     if create_file:
