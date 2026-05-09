@@ -181,6 +181,12 @@ def load_config(config_path: Path) -> dict[str, Any]:
             error(f"ERROR: Configuration setting {attr} has wrong type (expected {expected_type})")
             input("\nPress Enter to exit...")
             raise SystemExit(1)
+        if attr == "MAX_DEPTH" and value < -1:
+            error(
+                f"ERROR: MAX_DEPTH is set to {value}. Valid range: -1 (unlimited), 0 (root only), or positive integer."
+            )
+            info("Please fix the value in your configuration file (MAX_DEPTH must be -1, 0, or a positive integer).")
+            raise SystemExit(1)
         config_dict[attr.lower()] = value
 
     # Transform keys and values to the internal format
