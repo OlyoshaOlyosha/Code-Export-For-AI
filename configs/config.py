@@ -18,8 +18,6 @@ BLACKLIST_EXTENSIONS = {
     "pyi",            # Type stub files
     "lock",           # Dependency lock files (poetry.lock, package-lock.json)
     "map",            # Source maps
-    "min.js", "min.css",  # Minified assets
-    "bundle.js", "chunk.js",  # Bundled JS
 }
 
 # Extensionless files whitelist
@@ -60,7 +58,11 @@ BLACKLIST_DIRS = {
     "logs",
 }
 
-# Filenames to ignore
+# To exclude minified/bundled files (e.g., app.min.js, vendor.bundle.js),
+# add them here and set FILENAME_FILTER_MODE = "contains".
+# Example: BLACKLIST_FILENAMES = {"min.", "bundle.", "chunk."}
+# Note: do NOT add these to BLACKLIST_EXTENSIONS -- that set works on the
+# part after the LAST dot, so "min.js" would only match a file named literally "min.js".
 BLACKLIST_FILENAMES = {"setup.py", "requirements.txt"}
 
 # Filename matching mode: 'exact' or 'contains'
