@@ -7,39 +7,44 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-exclude = ["config.py"]
 
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-    "D103",    # Missing docstring in public function
-    "ANN101",  # Missing type annotation for self
-    "T201",    # Allow print()
-    "RUF001", "RUF002", "RUF003", # Ambiguous cyrillic characters
-    "D212", "D213", # Docstring summary position
-    "ERA001",  # Commented-out code
-    "COM812",  # Trailing comma (conflict with formatter)
-    "ANN204",  # Missing return type for special methods (__init__)
-    "PERF203", # try-except in loop - acceptable for file operations, would complicate code
-    "FBT003",  # Boolean positional value in function call - Tkinter APIs require boolean literals
-    "PLR2004",  # Magic value comparison
+    "ANN101",  # Missing type annotation for self (handled by class definition)
+    "ANN204",  # Missing return type for __init__ (always returns None)
+    "COM812",  # Trailing comma (conflicts with formatter)
+    "D212",    # Multi-line docstring summary start (conflicts with formatter)
+    "D213",    # Multi-line docstring summary start (conflicts with formatter)
+    "EM102",   # f-string in exception class (acceptable for dynamic error context)
+    "T201",    # Allow print() (Standard for CLI applications and quick scripts)
+    "RUF001",  # Allow ambiguous cyrillic characters in strings
+    "RUF002",  # Allow ambiguous cyrillic characters in docstrings
+    "RUF003",  # Allow ambiguous cyrillic characters in comments
+    "S605",    # Start process with a shell: check for injection
+    "S607",    # Start process with a partial path
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
     "S101",    # Use of assert detected
-    "ANN201",  # Missing return type for public function
-    "PLR2004", # Magic value used in comparison
+    "SLF001",  # Accessing private members (necessary for testing internals)
+    "T201",    # Allow print() for local debugging in test files
+    "ANN201",  # Missing return type for test functions
+    "PLR2004", # Magic value used in comparison (expected in assertions)
     "D100",    # Missing docstring in public module
-    "D104",    # Missing docstring in __init__.py of the tests folder
-    "ANN001",  # Mocks' arguments can be untyped
-    "ARG001",  # Unused function argument
+    "D103",    # Missing docstring in public function (tests are self-documenting)
+    "D104",    # Missing docstring in __init__.py
+    "ARG001",  # Unused function argument (common with pytest fixtures)
     "PT011",   # Broad ValueError is fine in tests
     "PLC0415", # Local imports for cache clearing/mocking are fine
-    "BLE001",  # Allow common exceptions to be caught in tests
-    "PLR0913", # Allow a large number of arguments (mocks) in tests
+    "BLE001",  # Allow catching broad exceptions in test assertions
+    "PLR0913", # Allow many arguments (mocks/fixtures) in tests
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff.lint.pylint]
+max-args = 7
