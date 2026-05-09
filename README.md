@@ -30,15 +30,22 @@ Tool to export any project folder or repository into a single, neatly formatted 
 - Option to show empty directories in the structure (`SHOW_EMPTY_DIRS`) and include empty files (only in structure, no code block, `INCLUDE_EMPTY_FILES`).
 - Save output to a file and/or copy to the clipboard.
 - Clipboard safety limit to avoid pasting huge amounts of text accidentally.
-- Print simple statistics (file count, characters, runtime).
+- Print simple statistics (file count, characters, runtime, token estimate).
 - Works with CLI or GUI folder picker (Tkinter).
 
-## Installation / Requirements
-- Python 3.10 or higher (recommended).
-- Required: `colorama` for colored console output.
-- Optional: `pyperclip` for more reliable cross-platform clipboard support (if not installed, the tool falls back to native utilities: `clip`, `pbcopy`, `xclip`/`xsel`).
+## Prerequisites
+- **Python 3.10** or higher.
+- **Required packages** (automatically installed, see Installation):
+  - `colorama` – coloured console output.
+  - `tiktoken` – token count estimation in statistics (uses `o200k_base` encoding).
+- **Optional**: `pyperclip` for more reliable cross‑platform clipboard support. If not installed, the tool falls back to native utilities:
+  - Windows: `clip`
+  - macOS: `pbcopy`
+  - Linux: `xclip` or `xsel` (at least one must be available)
 
-Install dependencies:
+## Installation / Requirements
+1. Clone the repository or download the source.
+2. Install the required dependencies:
 
 ```powershell
 # install from project's requirements.txt
@@ -48,10 +55,12 @@ pip install -r requirements.txt
 Or install manually:
 
 ```powershell
-pip install colorama
+pip install colorama tiktoken
 # optional, for better clipboard support
 pip install pyperclip
 ```
+
+> **Note**: `tiktoken` is mandatory and used for token counting shown in the statistics summary.
 
 ## Quickstart
 1. Open a terminal in the `Code Export For AI` folder.
@@ -68,11 +77,18 @@ python main.py -d "C:\path\to\project" -o export.txt -c python
 ```
 
 - `-d, --directory` – path to project folder (if omitted, a GUI folder picker opens).
-- `-o, --output` – output filename (relative to `OUTPUT_DIR/config_name/`).
+- `-o, --output` – output filename (relative to `OUTPUT_DIR/config_name/`; if not given, the default name from configuration is used with an automatic sequential suffix).
 - `-c, --config` – name of a configuration file from the `configs/` folder (e.g., `python` for `configs/python.py`). If omitted, the tool will:
   - automatically use the only config if exactly one `.py` file exists in `configs/`,
   - show a numbered selection menu if multiple configs are present,
   - fall back to `config.py` in the project root if `configs/` is empty.
+
+### CLI Reference
+| Argument | Short | Description |
+|----------|-------|-------------|
+| `--directory` | `-d` | Path to the project directory to export. If not provided, a graphical folder picker opens (falls back to console input if GUI is unavailable). |
+| `--output` | `-o` | Output file path. Relative paths are resolved inside the effective output directory (`OUTPUT_DIR/config_name/`). If omitted, the default name from the configuration is used and a unique suffix (e.g. `_1`, `_2`) is appended to avoid overwriting. |
+| `--config` | `-c` | Name of the configuration file to use. Accepts a filename relative to `configs/` (e.g. `python` → `configs/python.py`), an absolute path, or a path relative to the current working directory. When not specified, the tool automatically selects or prompts for a configuration (see above). |
 
 Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
 
@@ -122,7 +138,7 @@ When `INCLUDE_EMPTY_FILES` is enabled (default), empty files are shown in the st
 ## Configuration
 The script expects configuration files inside the `configs/` folder (or a legacy `config.py` in the project root). Copy the example `config.py` from the repository into `configs/` and adjust it as needed. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and switch between them using the `-c` flag.
 
-**Note on output location:** The final output is saved in a subdirectory named after the configuration file (without `.py`) inside `OUTPUT_DIR`. For example, if `OUTPUT_DIR = "outputs"` and you use `python.py`, the file will be placed in `outputs/python/`.
+**Output location logic:** The final output is saved in a subdirectory named after the configuration file (without `.py`) inside `OUTPUT_DIR`. For example, if `OUTPUT_DIR = "outputs"` and you use `python.py`, files will be placed in `outputs/python/`. The filename derives from `OUTPUT_FILENAME` (or the `-o` argument) and may receive a sequential number to prevent overwrites when running repeatedly.
 
 Key options (inside a `.py` config file):
 
@@ -138,7 +154,7 @@ Key options (inside a `.py` config file):
 | `OUTPUT_DIR` | `"outputs"` | Base directory where output files are saved. A subfolder with the configuration name will be created automatically. |
 | `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR/config_name/`). |
 | `MAX_FILE_SIZE_MB` | `5` | Maximum file size to include (in MB). |
-| `CREATE_FILE` | `True` | Whether to write the output file. |
+| `CREATE_FILE` | `True` | Whether to write the output file. **If both `CREATE_FILE` and `COPY_TO_CLIPBOARD` are `False`, file output is enabled automatically.** |
 | `COPY_TO_CLIPBOARD` | `True` | Whether to copy result to clipboard. |
 | `EXPORT_STRUCTURE` | `True` | Include project directory structure (ASCII tree) in output. |
 | `EXPORT_CONTENT` | `True` | Include file contents (code) in output. |
@@ -146,16 +162,17 @@ Key options (inside a `.py` config file):
 | `INCLUDE_EMPTY_FILES` | `True` | When `EXPORT_CONTENT` is `True`, include empty files (only in structure, no code block). |
 | `MAX_CLIPBOARD_CHARS` | `500000` | Maximum characters to copy to clipboard; set to `0` to disable the limit. |
 
-> **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will ask whether to enable `EXPORT_CONTENT` for this run and automatically update the configuration file for future runs.
+> **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will prompt you to enable content export **for this run only** – it does not modify the configuration file.
 
 Language detection for code fences is based on file extension using a built-in mapping (e.g., `.py` → `python`, `.js` → `javascript`). The mapping can be extended by editing the `EXTENSION_LANGUAGE_MAP` dictionary in `exporter/processor.py` if needed.
 
-## Tips
-- For large repositories, increase `MAX_FILE_SIZE_MB` or use `MAX_DEPTH` to limit traversal.
-- If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed or install `pyperclip`.
+## Advanced Usage & Tips
+- For large repositories, increase `MAX_FILE_SIZE_MB` or use `MAX_DEPTH` to limit traversal and keep the export manageable.
+- If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed, or install `pyperclip`.
 - To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in your configuration.
 - If the output is too large for the clipboard, increase `MAX_CLIPBOARD_CHARS` or set it to `0`.
 - Create multiple configuration files in `configs/` for different project types (e.g., Python-only, frontend-only) and switch with `-c`.
+- The final statistics include an approximate token count (relative to a 128k context limit) – this helps gauge how well the export fits into common AI context windows.
 
 ## Contributing
 Improvements welcome — open an issue or submit a pull request.
