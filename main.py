@@ -345,7 +345,7 @@ def perform_export(
 
 
 def main() -> None:
-    __version__ = "1.2.0"
+    __version__ = "1.3.0"
     __app_name__ = "Code Export For AI"
 
     try:
