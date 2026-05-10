@@ -6,11 +6,13 @@ project structure generation, and final output formatting.
 
 import fnmatch
 import os
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from pathspec import PathSpec
+from rich.progress import BarColumn, Progress, TextColumn
 
 from exporter.clipboard import copy_to_clipboard
 from exporter.console import error, success, warning
@@ -529,90 +531,119 @@ def _collect_files(
     input_path = Path(input_dir)
     max_size = config.get("max_size")  # may be 0 meaning "no limit"
 
-    for root, dirs, files in os.walk(input_dir):
-        rel_root = Path(root).relative_to(input_dir).as_posix()
-        depth = 0 if rel_root == "." else len(Path(rel_root).parts)
+    # ── Progress bar while collecting files ────────────────────────────
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed} files"),
+        transient=True,
+    ) as progress:
+        task = progress.add_task("Scanning...", total=None)
+        processed_count = 0
+        last_update_time = time.time()
 
-        # Filter out blacklisted and hidden directories
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
+        for root, dirs, files in os.walk(input_dir):
+            rel_root = Path(root).relative_to(input_dir).as_posix()
+            depth = 0 if rel_root == "." else len(Path(rel_root).parts)
 
-        # Apply .gitignore filtering to directories (PathSpec requires trailing slash)
-        if gitignore_spec is not None:
-            dirs[:] = [
-                d
-                for d in dirs
-                if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_path).as_posix()}/")
-            ]
+            # Filter out blacklisted and hidden directories
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
 
-        # Apply depth limit (-1 means unlimited)
-        if max_depth != -1:
-            if depth > max_depth:
-                dirs.clear()
-                continue
-            if depth == max_depth:
-                if rel_root != ".":  # don't mark root as "extra"
-                    extra_dirs.add(rel_root)
-                dirs.clear()  # do not go deeper
+            # Apply .gitignore filtering to directories (PathSpec requires trailing slash)
+            if gitignore_spec is not None:
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_path).as_posix()}/")
+                ]
 
-        for filename in files:
-            file_path = Path(root) / filename
-            rel_path = file_path.relative_to(input_path).as_posix()
-
-            # Apply .gitignore filtering to files
-            if gitignore_spec is not None and gitignore_spec.match_file(rel_path):
-                continue
-
-            if not is_code_file(str(file_path), config):
-                stats.skipped_rules += 1
-                continue
-
-            # File passed code‑file filters – collect size for statistics
-            try:
-                file_size = file_path.stat().st_size
-            except OSError:
-                # Inaccessible file – skip it.
-                continue
-
-            stats.largest_files.append((file_size, rel_path))
-
-            # Size limit check
-            if max_size and file_size > max_size:
-                stats.skipped_size += 1
-                continue
-
-            export_content = config.get("export_content", True)
-            include_empty = config.get("include_empty_files", True)
-
-            # When content export is disabled we avoid reading the whole file.
-            if export_content:
-                content = read_file_content(str(file_path))
-                if content is None:
-                    stats.skipped_binary += 1
+            # Apply depth limit (-1 means unlimited)
+            if max_depth != -1:
+                if depth > max_depth:
+                    dirs.clear()
                     continue
-                if not include_empty and content == "":
+                if depth == max_depth:
+                    if rel_root != ".":  # don't mark root as "extra"
+                        extra_dirs.add(rel_root)
+                    dirs.clear()  # do not go deeper
+
+            for filename in files:
+                file_path = Path(root) / filename
+                rel_path = file_path.relative_to(input_path).as_posix()
+
+                # Apply .gitignore filtering to files
+                if gitignore_spec is not None and gitignore_spec.match_file(rel_path):
                     continue
-            else:
-                # Determine emptiness via file size – fast and avoids I/O.
-                is_empty = file_size == 0
-                if not include_empty and is_empty:
+
+                if not is_code_file(str(file_path), config):
+                    stats.skipped_rules += 1
                     continue
-                content = ""  # placeholder
 
-            # File is included → update extension counter
-            ext = file_path.suffix.lower().lstrip(".")
-            ext_key = ext or "<no extension>"
-            stats.extension_counts[ext_key] = stats.extension_counts.get(ext_key, 0) + 1
+                # File passed code‑file filters – collect size for statistics
+                try:
+                    file_size = file_path.stat().st_size
+                except OSError:
+                    # Inaccessible file – skip it.
+                    continue
 
-            rel_dir = Path(rel_path).parent.as_posix()
-            files_by_dir[rel_dir].append(filename)
-            processed_paths.add(rel_path)
+                stats.largest_files.append((file_size, rel_path))
 
-            # Build content chunk only if content export is enabled.
-            if export_content and content:
-                language = detect_language(str(file_path))
-                lang_tag = language or file_path.suffix.lower().lstrip(".")
-                chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
-                chunks[rel_path] = chunk
+                # Size limit check
+                if max_size and file_size > max_size:
+                    stats.skipped_size += 1
+                    continue
+
+                export_content = config.get("export_content", True)
+                include_empty = config.get("include_empty_files", True)
+
+                # When content export is disabled we avoid reading the whole file.
+                if export_content:
+                    content = read_file_content(str(file_path))
+                    if content is None:
+                        stats.skipped_binary += 1
+                        continue
+                    if not include_empty and content == "":
+                        continue
+                else:
+                    # Determine emptiness via file size – fast and avoids I/O.
+                    is_empty = file_size == 0
+                    if not include_empty and is_empty:
+                        continue
+                    content = ""  # placeholder
+
+                # File is included → update extension counter
+                ext = file_path.suffix.lower().lstrip(".")
+                ext_key = ext or "<no extension>"
+                stats.extension_counts[ext_key] = stats.extension_counts.get(ext_key, 0) + 1
+
+                rel_dir = Path(rel_path).parent.as_posix()
+                files_by_dir[rel_dir].append(filename)
+                processed_paths.add(rel_path)
+
+                # Update progress bar (throttled to ~20 fps)
+                processed_count += 1
+                now = time.time()
+                if now - last_update_time >= 0.05:
+                    progress.update(
+                        task,
+                        completed=processed_count,
+                        description=f"Scanning... ({processed_count} files)",
+                    )
+                    last_update_time = now
+
+                # Build content chunk only if content export is enabled.
+                if export_content and content:
+                    language = detect_language(str(file_path))
+                    lang_tag = language or file_path.suffix.lower().lstrip(".")
+                    chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
+                    chunks[rel_path] = chunk
+
+        # Final unconditional update — always show the correct count before disappearing.
+        progress.update(
+            task,
+            completed=processed_count,
+            description=f"Scanning... ({processed_count} files)",
+        )
 
     # Apply priority-based ordering if patterns are defined
     priority_patterns = config.get("priority_patterns", [])
