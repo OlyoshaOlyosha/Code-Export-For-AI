@@ -5,6 +5,7 @@ This module provides the entry point for exporting code projects to a single fil
 """
 
 import argparse
+import ast
 import importlib.util
 import time
 from pathlib import Path
@@ -44,6 +45,50 @@ def load_app_config() -> dict[str, bool]:
 
     value = getattr(module, "CHECK_FOR_UPDATES", True)
     return {"check_for_updates": bool(value)}
+
+
+def _get_config_description(config_path: Path) -> str | None:
+    """Extract a short user-friendly description from a config file using static AST parsing.
+
+    Looks for a top-level assignment: CONFIG_DESCRIPTION = "..." and returns
+    the first non-empty line, truncated to 77 characters with an ellipsis
+    if longer. Returns None if the variable is missing, not a string, or
+    the file cannot be read/parsed.
+
+    Args:
+        config_path: Path to the configuration .py file.
+
+    Returns:
+        Truncated description string or None.
+
+    """
+    try:
+        source = config_path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            # Only consider a single target named CONFIG_DESCRIPTION
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                continue
+            if node.targets[0].id != "CONFIG_DESCRIPTION":
+                continue
+            # Value must be a string constant
+            if not isinstance(node.value, ast.Constant) or not isinstance(node.value.value, str):
+                return None
+            raw = node.value.value
+            # Extract first non-empty line
+            lines = raw.split("\n")
+            first_line = next((line.strip() for line in lines if line.strip()), "")
+            if not first_line:
+                return None
+            if len(first_line) > 77:
+                return first_line[:77] + "..."
+            return first_line
+        return None
+    except Exception:
+        # Any error (missing file, permission, syntax, etc.) → no description
+        return None
 
 
 def find_config_files() -> list[Path]:
@@ -118,7 +163,11 @@ def select_config_file(requested_config: str | None) -> Path | None:
         # Multiple configs – prompt user
         print("\nAvailable configurations:")
         for idx, path in enumerate(config_files, start=1):
-            print(f"  {idx}. {path.name}")
+            description = _get_config_description(path)
+            if description is not None:
+                print(f"  {idx}. {path.name} – {description}")
+            else:
+                print(f"  {idx}. {path.name}")
         while True:
             choice = prompt("Select configuration number: ").strip()
             try:

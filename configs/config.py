@@ -4,6 +4,10 @@ User configuration for Code Export For AI.
 Edit this file to customize filtering and behavior.
 """
 
+# Brief description of this configuration (one line, ~80 chars max).
+# It will be shown in the configuration selection menu.
+CONFIG_DESCRIPTION = "Default configuration – all file types, balanced filters"
+
 # File extensions to ignore (without dot)
 BLACKLIST_EXTENSIONS = {
     "txt", "md", "markdown", "log", "pdf", "doc", "docx", "xls", "xlsx",
