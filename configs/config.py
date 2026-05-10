@@ -75,7 +75,8 @@ FILENAME_FILTER_MODE = "exact"
 # Output settings
 OUTPUT_DIR = "outputs"  # Default directory for output files
 OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
-MAX_FILE_SIZE_MB = 5  # Max file size to include (in MB)
+# Max file size to include (in MB). Set to 0 to disable the limit.
+MAX_FILE_SIZE_MB = 5
 CREATE_FILE = True  # Write output to file
 COPY_TO_CLIPBOARD = True  # Copy output to clipboard
 

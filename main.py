@@ -267,6 +267,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
             )
             info("Please fix the value in your configuration file (MAX_DEPTH must be -1, 0, or a positive integer).")
             raise SystemExit(1)
+        # Notify user about unlimited file size mode (0 = disabled limit)
+        if attr == "MAX_FILE_SIZE_MB" and value == 0:
+            info("MAX_FILE_SIZE_MB = 0 — file size limit disabled. All files will be included regardless of size.")
         config_dict[attr.lower()] = value
 
     # Transform keys and values to the internal format
