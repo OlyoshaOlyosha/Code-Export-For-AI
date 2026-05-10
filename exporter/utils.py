@@ -23,20 +23,24 @@ def select_directory() -> str | None:
 
     """
     # Attempt GUI selection
+    folder_path = None
     try:
         import tkinter as tk  # noqa: PLC0415
         from tkinter import filedialog  # noqa: PLC0415
-
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        folder_path = filedialog.askdirectory(title="Select project folder")
-        root.destroy()
-        if folder_path:
-            return folder_path
-    except (ImportError, tk.TclError) as e:
-        # tkinter not installed or cannot connect to display
+    except ImportError as e:
         warning(f"GUI folder selection unavailable: {e}")
+    else:
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            folder_path = filedialog.askdirectory(title="Select project folder")
+            root.destroy()
+        except tk.TclError as e:
+            warning(f"GUI folder selection unavailable: {e}")
+
+    if folder_path:
+        return folder_path
 
     # Fallback to manual input
     info("Please enter the project directory path manually:")
