@@ -67,7 +67,10 @@ class TestSelectDirectory:
 
             with patch("builtins.__import__", side_effect=fake_import):
                 result = select_directory()
-                assert result == "/manual_dir", f"Expected '/manual_dir', got {result}"
+                # select_directory returns an absolute, resolved path.
+                # Compare Path objects to be cross‑platform.
+                expected = Path("/manual_dir").resolve()
+                assert Path(result) == expected, f"Expected {expected}, got {result}"
                 mock_warn.assert_called_once()
 
     def test_tcl_error_falls_back_to_manual(self) -> None:
@@ -112,7 +115,8 @@ class TestSelectDirectory:
             # Make tkinter import fail to go straight to manual
             with patch("builtins.__import__", side_effect=ImportError):
                 result = select_directory()
-                assert result == str(valid_dir), f"Expected {valid_dir}, got {result}"
+                # select_directory resolves the path → compare resolved Path objects
+                assert Path(result) == valid_dir.resolve(), f"Expected {valid_dir.resolve()}, got {result}"
                 mock_error.assert_called_once()  # first invalid attempt
                 # info called twice: initial prompt + prompt after error
                 assert mock_info.call_count == 2
