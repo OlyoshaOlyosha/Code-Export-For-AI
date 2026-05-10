@@ -302,10 +302,11 @@ class TestCollectFiles:
         py_file.write_text("print('hello')")
 
         with patch("exporter.processor.is_code_file", return_value=True):
-            files_by_dir, all_content, processed, extra = _collect_files(str(root), config)
-            assert processed == {"main.py"}
-            assert len(all_content) == 1
-            assert "main.py" in all_content[0]
+            files_by_dir, all_content, processed, extra, stats = _collect_files(str(root), config)
+            assert processed == {"main.py"}, f"Expected {{'main.py'}}, got {processed}"
+            assert len(all_content) == 1, f"Expected 1 content chunk, got {len(all_content)}"
+            assert "main.py" in all_content[0], "'main.py' not found in first chunk"
+            assert stats is not None, "stats should not be None"
 
     def test_skips_blacklisted_dir(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """Directories matching blacklist_dirs are excluded."""
@@ -319,9 +320,10 @@ class TestCollectFiles:
         (root / "src" / "main.py").write_text("code")
         # Only src/main.py should be collected
         with patch("exporter.processor.is_code_file", return_value=True):
-            files_by_dir, _, processed, _ = _collect_files(str(root), config)
-            assert "src/main.py" in processed
-            assert all("venv" not in p for p in processed)
+            files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+            assert "src/main.py" in processed, f"Expected 'src/main.py' in processed, got {processed}"
+            assert all("venv" not in p for p in processed), "venv files should be excluded"
+            assert stats is not None, "stats should not be None"
 
     def test_max_depth_limit(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """max_depth=1 includes files at depth 1, stops deeper recursion."""
@@ -337,15 +339,16 @@ class TestCollectFiles:
         (root / "sub" / "sub2").mkdir()
         (root / "sub" / "sub2" / "c.py").write_text("c")
         with patch("exporter.processor.is_code_file", return_value=True):
-            files_by_dir, _, processed, extra = _collect_files(str(root), config)
+            files_by_dir, _, processed, extra, stats = _collect_files(str(root), config)
             # Root file is included
-            assert "a.py" in processed
+            assert "a.py" in processed, f"'a.py' missing from {processed}"
             # Files at depth 1 (max_depth) are included
-            assert "sub/b.py" in processed
+            assert "sub/b.py" in processed, f"'sub/b.py' missing from {processed}"
             # Files deeper than max_depth are excluded
-            assert "sub/sub2/c.py" not in processed
+            assert "sub/sub2/c.py" not in processed, f"'sub/sub2/c.py' should not be in {processed}"
             # Directory at max_depth is marked as extra
-            assert "sub" in extra
+            assert "sub" in extra, f"'sub' should be in extra dirs, got {extra}"
+            assert stats is not None, "stats should not be None"
 
     def test_gitignore_filtering_applied(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """Gitignore spec removes matching files/dirs."""
@@ -366,9 +369,10 @@ class TestCollectFiles:
 
         mock_spec.match_file.side_effect = match_file
         with patch("exporter.processor.is_code_file", return_value=True):
-            files_by_dir, _, processed, _ = _collect_files(str(root), config, gitignore_spec=mock_spec)
-            assert "src/app.py" in processed
-            assert not any("dist" in p for p in processed)
+            files_by_dir, _, processed, _, stats = _collect_files(str(root), config, gitignore_spec=mock_spec)
+            assert "src/app.py" in processed, f"Expected 'src/app.py', got {processed}"
+            assert not any("dist" in p for p in processed), f"'dist' paths should be excluded: {processed}"
+            assert stats is not None, "stats should not be None"
 
     def test_include_empty_files_flag(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """When include_empty_files=False, empty files are skipped."""
@@ -381,9 +385,140 @@ class TestCollectFiles:
         (root / "empty.py").write_text("")
         (root / "nonempty.py").write_text("data")
         with patch("exporter.processor.is_code_file", return_value=True):
-            _, _, processed, _ = _collect_files(str(root), config)
-            assert "empty.py" not in processed
-            assert "nonempty.py" in processed
+            _, _, processed, _, stats = _collect_files(str(root), config)
+            assert "empty.py" not in processed, f"'empty.py' should be excluded, got {processed}"
+            assert "nonempty.py" in processed, f"'nonempty.py' should be included, got {processed}"
+            assert stats is not None, "stats should not be None"
+
+    def test_export_content_false_skips_chunks(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """When export_content=False, all_content is empty but processed paths are recorded."""
+        config = sample_config_dict.copy()
+        config["blacklist_extensions"] = set()
+        config["blacklist_dirs"] = set()
+        config["blacklist_filenames"] = set()
+        config["export_content"] = False
+        config["include_empty_files"] = True  # empty files will be included (only in path)
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "file.py").write_text("data")
+        with patch("exporter.processor.is_code_file", return_value=True):
+            files_by_dir, all_content, processed, extra, stats = _collect_files(str(root), config)
+            assert "file.py" in processed, f"Expected 'file.py' in processed, got {processed}"
+            assert all_content == [], f"Expected empty content list, got {all_content}"
+            assert stats is not None, "stats should not be None"
+
+    def test_stats_skip_rules_count(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Files rejected by is_code_file should increment skipped_rules."""
+        config = sample_config_dict.copy()
+        config["blacklist_dirs"] = set()
+        config["blacklist_filenames"] = set()
+        # leave blacklist_extensions as is; .txt is blacklisted
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "readme.txt").write_text("text")
+        (root / "script.py").write_text("print(1)")
+        # is_code_file will return False for .txt, True for .py
+        # we do NOT mock is_code_file, use real implementation from scanner
+        files_by_dir, all_content, processed, extra, stats = _collect_files(str(root), config)
+        assert "script.py" in processed, "script.py should be included"
+        assert "readme.txt" not in processed, "readme.txt should be excluded"
+        assert stats.skipped_rules == 1, f"Expected 1 skipped_rule, got {stats.skipped_rules}"
+
+    def test_stats_skip_binary_and_size(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Binary files -> skipped_binary; oversized files -> skipped_size."""
+        config = sample_config_dict.copy()
+        config["blacklist_extensions"] = set()
+        config["blacklist_dirs"] = set()
+        config["blacklist_filenames"] = set()
+        config["max_size"] = 100  # 100 bytes limit
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "good.py").write_text("ok")
+        big_file = root / "big.py"
+        big_file.write_text("x" * 200)  # 200 bytes (>100)
+        binary_file = root / "bin.dat"
+        binary_file.write_bytes(b"\x80\x81")
+
+        with patch("exporter.processor.is_code_file", return_value=True):
+            # patch read_file_content to return None for binary_file
+            original_read = read_file_content
+
+            def fake_read(path: str) -> str | None:
+                if "bin.dat" in path:
+                    return None
+                return original_read(path)
+
+            with patch("exporter.processor.read_file_content", side_effect=fake_read):
+                files_by_dir, all_content, processed, extra, stats = _collect_files(str(root), config)
+
+        assert "good.py" in processed
+        assert "big.py" not in processed, "big.py should be skipped by size"
+        assert "bin.dat" not in processed, "bin.dat should be skipped as binary"
+        assert stats.skipped_binary == 1, f"Expected 1 skipped_binary, got {stats.skipped_binary}"
+        assert stats.skipped_size == 1, f"Expected 1 skipped_size, got {stats.skipped_size}"
+
+    def test_stats_extension_counts_and_largest_files(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Exported files should update extension_counts and largest_files."""
+        config = sample_config_dict.copy()
+        config["blacklist_extensions"] = set()
+        config["blacklist_dirs"] = set()
+        config["blacklist_filenames"] = set()
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "main.py").write_text("print('hi')")  # size ~11
+        (root / "utils.py").write_text("def foo(): pass")  # size ~16
+        (root / "script.js").write_text("console.log(1)")  # size ~16
+        (root / "style.css").write_text("body{}")  # size ~5
+
+        with patch("exporter.processor.is_code_file", return_value=True):
+            _, _, processed, _, stats = _collect_files(str(root), config)
+
+        assert len(processed) == 4, f"Expected 4 files, got {processed}"
+        # Extension counts (py=2, js=1, css=1)
+        assert stats.extension_counts.get("py") == 2, f"Expected 2 .py files, got {stats.extension_counts}"
+        assert stats.extension_counts.get("js") == 1
+        assert stats.extension_counts.get("css") == 1
+
+        # largest_files contains all 4 files with sizes
+        assert len(stats.largest_files) == 4
+        sizes = {path: size for size, path in stats.largest_files}
+        assert "main.py" in sizes
+        assert sizes["main.py"] > 0
+
+    def test_priority_sorting(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Files should be ordered by priority patterns, then depth, then name."""
+        config = sample_config_dict.copy()
+        config["blacklist_extensions"] = set()
+        config["blacklist_dirs"] = set()
+        config["blacklist_filenames"] = set()
+        config["priority_patterns"] = ["*.py"]  # higher priority
+        config["low_priority_patterns"] = ["*.txt"]  # lower priority
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "README.md").write_text("readme")
+        (root / "sub").mkdir()
+        (root / "sub" / "helper.py").write_text("helper")
+        (root / "main.py").write_text("main")
+        (root / "notes.txt").write_text("notes")
+
+        with patch("exporter.processor.is_code_file", return_value=True):
+            files_by_dir, all_content, processed, extra, stats = _collect_files(str(root), config)
+
+        # Expected order: high priority *.py (sorted by depth, then name):
+        #  main.py (depth 1) first, then sub/helper.py (depth 2)
+        # Next neutral files: *.md (depth 1) -> README.md
+        # Last low priority: *.txt -> notes.txt
+        # The chunk string contains the path, we can extract paths
+        paths_in_order = []
+        for chunk in all_content:
+            # chunk format: "rel_path:\n```...", get first line
+            first_line = chunk.split("\n")[0]
+            if ":" in first_line:
+                paths_in_order.append(first_line.split(":")[0])
+
+        assert paths_in_order == ["main.py", "sub/helper.py", "README.md", "notes.txt"], (
+            f"Unexpected order: {paths_in_order}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -427,10 +562,12 @@ class TestExportProject:
         processed_paths = {"main.py"}
         extra_dirs: set[str] = set()
         full_output = "# output\ncontent"
+        # stats can be any ExportStats-like object; a MagicMock works for testing
+        mock_stats = MagicMock()
         with (
             patch(
                 "exporter.processor._collect_files",
-                return_value=(files_by_dir, all_content, processed_paths, extra_dirs),
+                return_value=(files_by_dir, all_content, processed_paths, extra_dirs, mock_stats),
             ) as mock_collect,
             patch("exporter.processor._build_output", return_value=full_output) as mock_build,
             patch("exporter.processor.handle_clipboard_copy") as mock_handle,
@@ -442,12 +579,17 @@ class TestExportProject:
             mock_build.assert_called_once()
             # handle_clipboard_copy called with correct args
             mock_handle.assert_called_once_with(full_output, len(full_output), copy_to_buffer=True, config=config)
-            # file written (we can verify Path.mkdir and write_text)
+            # file written
             out_path = Path(output_file)
-            assert out_path.parent.exists()
-            assert out_path.read_text() == full_output
-            # return tuple
-            assert result == (files_by_dir, len(full_output), full_output)
+            assert out_path.parent.exists(), f"Output directory {out_path.parent} should exist"
+            assert out_path.read_text() == full_output, f"File content mismatch: {out_path.read_text()}"
+            # return tuple now has 4 elements (files_by_dir, total_chars, full_output, stats)
+            assert len(result) == 4, f"Expected 4-tuple, got {result}"
+            returned_files, returned_chars, returned_output, returned_stats = result
+            assert returned_files == files_by_dir, f"Files mismatch: {returned_files}"
+            assert returned_chars == len(full_output), "Character count mismatch"
+            assert returned_output == full_output, "Full output mismatch"
+            assert returned_stats is mock_stats, "stats object should be the same mock"
 
     def test_oserror_during_file_write_logs_error(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """If write_output raises OSError, error is logged but does not raise."""
@@ -462,10 +604,11 @@ class TestExportProject:
         processed_paths = {"main.py"}
         extra_dirs: set[str] = set()
         full_output = "content"
+        mock_stats = MagicMock()
         with (
             patch(
                 "exporter.processor._collect_files",
-                return_value=(files_by_dir, all_content, processed_paths, extra_dirs),
+                return_value=(files_by_dir, all_content, processed_paths, extra_dirs, mock_stats),
             ),
             patch("exporter.processor._build_output", return_value=full_output),
             patch("pathlib.Path.mkdir"),
@@ -487,10 +630,54 @@ class TestExportProject:
         root.mkdir()
         with (
             patch("exporter.processor.warning") as mock_warn,
-            patch("exporter.processor._collect_files", return_value=({}, [], set(), set())),
+            patch("exporter.processor._collect_files", return_value=({}, [], set(), set(), MagicMock())),
             patch("exporter.processor._build_output", return_value=""),
             patch("exporter.processor.handle_clipboard_copy"),
         ):
             export_project(str(root), "out.txt", config, create_file=False, copy_to_buffer=False)
             mock_warn.assert_called_once()
             assert "USE_GITIGNORE is True" in mock_warn.call_args[0][0]
+
+    def test_full_flow_with_real_gitignore(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Integration test: project with .gitignore excludes matching files."""
+        config = sample_config_dict.copy()
+        config["use_gitignore"] = True
+        config["export_structure"] = True
+        config["export_content"] = True
+        config["create_file"] = False
+        config["copy_to_buffer"] = False
+        config["blacklist_dirs"] = set()
+        config["blacklist_extensions"] = set()
+        config["blacklist_filenames"] = set()
+        root = tmp_path / "repo"
+        root.mkdir()
+        (root / ".gitignore").write_text("*.log\ndist/\n")
+        (root / "main.py").write_text("print(1)")
+        (root / "debug.log").write_text("log data")
+        (root / "dist").mkdir()
+        (root / "dist" / "bundle.js").write_text("js")
+        output_file = str(tmp_path / "out.txt")
+        result = export_project(str(root), output_file, config, create_file=False, copy_to_buffer=False)
+        files_by_dir, total_chars, full_output, stats = result
+        # main.py should be present, .log and dist/ excluded
+        assert "main.py" in str(files_by_dir), "main.py should be collected"
+        assert not any("debug.log" in p for d in files_by_dir for p in files_by_dir[d])
+        assert not any("dist" in p for d in files_by_dir for p in files_by_dir[d])
+        # full_output should not contain .log content
+        assert "log data" not in full_output
+        # stats should be valid
+        assert stats is not None
+
+    def test_limited_depth_export_content_false(self) -> None:
+        """max_depth=0, export_content=False -> structure only, no BEGIN FILE CONTENTS."""
+        config: dict[str, Any] = {
+            "max_depth": 0,
+            "export_structure": True,
+            "export_content": False,
+        }
+        extra = set()
+        with patch("exporter.processor._generate_structure_with_depth", return_value="tree\n") as mock_gen:
+            result = _build_output("/in", {"a.py"}, [], extra, config)
+            assert "tree" in result
+            assert "# BEGIN FILE CONTENTS" not in result
+            mock_gen.assert_called_once_with("/in", {"a.py"}, extra)

@@ -585,7 +585,8 @@ class TestPerformExport:
             patch("main.print_statistics") as mock_stats,
             patch("main.time.time", side_effect=[100.0, 101.5]),
         ):
-            mock_export.return_value = ({"src": ["main.py"]}, 42, "full output")
+            mock_stats_obj = MagicMock()  # dummy ExportStats
+            mock_export.return_value = ({"src": ["main.py"]}, 42, "full output", mock_stats_obj)
             perform_export(
                 input_dir="/project",
                 output_file="/out.txt",
