@@ -430,7 +430,15 @@ def main() -> None:
         # 5. Perform the export
         perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
 
-        input("\nPress Enter to exit...")
+        # Allow re‑exporting with the same configuration without restarting
+        while True:
+            answer = prompt("\nExport this config again? (Enter — yes, N — exit): ").strip().lower()
+            if answer and not answer.startswith("y"):
+                break
+            # Recompute the output filename so that the uniqueness counter advances
+            output_file = get_output_filename(args, config_dict, create_file=create_file)
+            perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
+
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")
         return
