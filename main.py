@@ -12,6 +12,7 @@ from typing import Any
 
 from exporter.console import error, header, info, prompt, warning
 from exporter.processor import export_project
+from exporter.updater import check_for_updates
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
 
@@ -407,6 +408,12 @@ def main() -> None:
         if not config_dict:
             input("\nPress Enter to exit...")
             return
+
+        # Application-level settings
+        app_cfg = load_app_config()
+        do_update_check = app_cfg.get("check_for_updates", True)
+        if do_update_check:
+            check_for_updates(__version__)
 
         create_file = config_dict["create_file"]
         copy_to_buffer = config_dict["copy_to_buffer"]
