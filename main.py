@@ -237,6 +237,17 @@ def load_config(config_path: Path) -> dict[str, Any]:
     config_dict["blacklist_filenames"] = config_dict.pop("blacklist_filenames")
     config_dict["filename_filter_mode"] = config_dict.pop("filename_filter_mode")
 
+    # Optional priority sorting patterns
+    for attr in ("PRIORITY_PATTERNS", "LOW_PRIORITY_PATTERNS"):
+        if not hasattr(module, attr):
+            config_dict[attr.lower()] = []
+        else:
+            value = getattr(module, attr)
+            if not isinstance(value, list):
+                error(f"ERROR: {attr} must be a list.")
+                raise SystemExit(1)
+            config_dict[attr.lower()] = value
+
     info(f"Configuration loaded from {config_path}")
     return config_dict
 

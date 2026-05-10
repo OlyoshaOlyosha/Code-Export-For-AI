@@ -4,6 +4,7 @@ Contains core logic: reading files, language detection for code‑fence tags,
 project structure generation, and final output formatting.
 """
 
+import fnmatch
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -519,7 +520,7 @@ def _collect_files(
 
     """
     files_by_dir: defaultdict[str, list[str]] = defaultdict(list)
-    all_content: list[str] = []
+    chunks: dict[str, str] = {}
     processed_paths: set[str] = set()
     extra_dirs: set[str] = set()
     stats = ExportStats()
@@ -611,7 +612,29 @@ def _collect_files(
                 language = detect_language(str(file_path))
                 lang_tag = language or file_path.suffix.lower().lstrip(".")
                 chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
-                all_content.append(chunk)
+                chunks[rel_path] = chunk
+
+    # Apply priority-based ordering if patterns are defined
+    priority_patterns = config.get("priority_patterns", [])
+    if priority_patterns:
+        low_priority_patterns = config.get("low_priority_patterns", [])
+        sorted_paths = sorted(processed_paths)
+
+        def _compute_priority(rel_path: str) -> int:
+            """Return priority tier: 0..N high, N neutral, N+1 low."""
+            for idx, pattern in enumerate(priority_patterns):
+                if fnmatch.fnmatch(rel_path, pattern):
+                    return idx
+            if low_priority_patterns:
+                for pattern in low_priority_patterns:
+                    if fnmatch.fnmatch(rel_path, pattern):
+                        return len(priority_patterns) + 1
+            return len(priority_patterns)
+
+        sorted_paths.sort(key=lambda p: (_compute_priority(p), p.count("/") + 1, p))
+        all_content = [chunks[p] for p in sorted_paths if p in chunks]
+    else:
+        all_content = list(chunks.values())
 
     return files_by_dir, all_content, processed_paths, extra_dirs, stats
 

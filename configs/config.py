@@ -90,3 +90,20 @@ MAX_DEPTH = -1  # -1 = unlimited, 0 = only selected directory, positive integer 
 
 # .gitignore integration
 USE_GITIGNORE = True  # If True, also respect .gitignore rules (in addition to blacklists)
+
+# Priority-based file ordering (optional).
+# Patterns use fnmatch syntax against the entire relative path.
+# Within each priority tier files are sorted by directory depth then alphabetically.
+# When both lists are empty the original insertion order is preserved.
+#
+# Example for a typical Python project:
+# PRIORITY_PATTERNS: list[str] = [
+#     "README*",
+#     "*.yaml", "*.yml", "*.toml", "setup.cfg", "pyproject.toml",
+#     "src/*.py", "src/*/*.py", "tests/*.py", "*.py",
+# ]
+# LOW_PRIORITY_PATTERNS: list[str] = [
+#     "requirements*.txt", "Pipfile", "Pipfile.lock",
+# ]
+PRIORITY_PATTERNS: list[str] = []
+LOW_PRIORITY_PATTERNS: list[str] = []
