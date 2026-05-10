@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import tiktoken
+from rich.tree import Tree
 
-from exporter.console import Fore, Style, error, info, success, warning
+from exporter.console import console, error, info, success, warning
 
 
 def select_directory() -> str | None:
@@ -98,57 +99,6 @@ class OutputInfo:
     copy_to_buffer: bool
 
 
-def _build_file_tree(files_by_dir: dict[str, list[str]], root_name: str) -> str:
-    """Build an ASCII tree representation of files grouped by directory.
-
-    Args:
-        files_by_dir: Mapping from relative directory paths to lists of filenames.
-        root_name: Name of the project root directory.
-
-    Returns:
-        A string containing the formatted tree.
-
-    """
-    # Build nested dictionary structure
-    tree: dict = {}
-    for rel_dir, filenames in files_by_dir.items():
-        # Normalize path separators and handle root '.' case
-        if rel_dir == ".":
-            parts = []
-        else:
-            parts = rel_dir.replace("\\", "/").split("/")
-        current = tree
-        for part in parts:
-            if part not in current:
-                current[part] = {}
-            current = current[part]
-        current["__files__"] = sorted(filenames)
-
-    def render_node(node: dict, prefix: str = "") -> list[str]:
-        lines = []
-        dirs = [k for k in node if k != "__files__"]
-        files = node.get("__files__", [])
-        items = sorted(dirs) + files
-        if not items:
-            return lines
-
-        pointers = ["├── "] * (len(items) - 1) + (["└── "] if items else [])
-        for i, name in enumerate(items):
-            pointer = pointers[i]
-            is_dir = name in dirs
-            line = f"{prefix}{pointer}{name}{'/' if is_dir else ''}"
-            lines.append(line)
-            if is_dir:
-                extension = "    " if pointer == "└── " else "│   "
-                lines.extend(render_node(node[name], prefix + extension))
-        return lines
-
-    root_line = f"{root_name}/"
-    lines = [root_line]
-    lines.extend(render_node(tree))
-    return "\n".join(lines)
-
-
 def print_statistics(
     files_by_dir: dict[str, list[str]],
     total_chars: int,
@@ -159,14 +109,7 @@ def print_statistics(
 ) -> None:
     """Print formatted statistics after export.
 
-    Args:
-        files_by_dir: Dictionary mapping directories to lists of files.
-        total_chars: Total number of characters in the exported content.
-        elapsed_time: Time taken for the export process.
-        output_info: OutputInfo object containing output file and flags.
-        input_dir: Path to the project root directory (used for tree label).
-        full_output: The complete exported text (used for token counting).
-
+    Uses Rich to render a colour‑coded file tree and to decorate metrics.
     """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
@@ -182,57 +125,56 @@ def print_statistics(
 
     info("\n=== STATISTICS ===")
 
-    if elapsed_time < 1.0:
-        time_color = Fore.GREEN
-    elif elapsed_time < 5.0:
-        time_color = Fore.YELLOW
-    else:
-        time_color = Fore.RED
-    info(f"Elapsed time: {time_color}{elapsed_time:.2f} sec{Style.RESET_ALL}")
+    # Elapsed time colour thresholds
+    time_style = "green" if elapsed_time < 1.0 else ("yellow" if elapsed_time < 5.0 else "red")
+    info(f"Elapsed time: [{time_style}]{elapsed_time:.2f} sec[/]")
 
     info(f"Characters: {total_chars:,} ({size_str})")
 
-    CONTEXT_LIMIT = 128_000  # tokens
-    percentage = (token_count / CONTEXT_LIMIT) * 100
+    # Token colour thresholds
+    context_limit = 128_000
+    percentage = (token_count / context_limit) * 100
     if percentage < 50:
-        token_color = Fore.GREEN
+        token_style = "green"
     elif percentage < 80:
-        token_color = Fore.YELLOW
+        token_style = "yellow"
     elif percentage < 95:
-        token_color = Fore.LIGHTYELLOW_EX
+        token_style = "bright_yellow"
     else:
-        token_color = Fore.RED
-    info(f"Tokens: ~{token_color}{token_count:,}{Style.RESET_ALL} / {CONTEXT_LIMIT:,} ({percentage:.1f}%)")
+        token_style = "red"
+    info(f"Tokens: ~[{token_style}]{token_count:,}[/] / {context_limit:,} ({percentage:.1f}%)")
 
     info(f"📁 Directories: {num_dirs}")
     info(f"📄 Files: {num_files}")
 
+    # Build a Rich Tree from the files_by_dir mapping
     info("\nFiles by directory:")
 
-    tree_output = _build_file_tree(files_by_dir, root_name)
-    for line in tree_output.splitlines():
-        if line.rstrip().endswith("/"):
-            last_slash_idx = line.rfind("/")
-            if last_slash_idx != -1:
-                name_start = 0
-                for i, ch in enumerate(line):
-                    if ch not in (" ", "├", "└", "│", "─"):
-                        name_start = i
-                        break
-                prefix = line[:name_start]
-                name_with_slash = line[name_start:]
-                if name_with_slash.endswith("/"):
-                    name_only = name_with_slash[:-1]
-                    slash = "/"
-                else:
-                    name_only = name_with_slash
-                    slash = ""
-                print(f"{prefix}{Fore.BLUE}{name_only}{Style.RESET_ALL}{slash}")
-            else:
-                print(f"{Fore.BLUE}{line}{Style.RESET_ALL}")
-        else:
-            print(line)
+    tree = Tree(f"[blue]{root_name}/[/]", guide_style="bold bright_blue")
+    # Keep track of already‑created directory nodes keyed by their relative path.
+    dir_nodes: dict[str, Tree] = {".": tree}
 
+    for rel_dir in sorted(files_by_dir):
+        if rel_dir == ".":
+            parent_node = tree
+        else:
+            parts = rel_dir.split("/")
+            accumulated = ""
+            parent_node = tree
+            for part in parts:
+                accumulated = f"{accumulated}/{part}" if accumulated else part
+                if accumulated not in dir_nodes:
+                    dir_node = parent_node.add(f"[blue]{part}/[/]")
+                    dir_nodes[accumulated] = dir_node
+                parent_node = dir_nodes[accumulated]
+            # parent_node is now the node for rel_dir
+
+        for filename in sorted(files_by_dir[rel_dir]):
+            parent_node.add(filename)
+
+    console.print(tree)
+
+    # Final result line
     result_parts = []
     if output_info.create_file:
         result_parts.append(f"saved to {output_info.output_file}")
