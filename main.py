@@ -372,13 +372,13 @@ def perform_export(
 
     start_time = time.time()
 
-    files_by_dir, total_chars, full_output = export_project(
+    files_by_dir, total_chars, full_output, stats = export_project(
         input_dir, output_file, config, create_file=create_file, copy_to_buffer=copy_to_buffer
     )
 
     elapsed_time = time.time() - start_time
     output_info = OutputInfo(output_file, create_file, copy_to_buffer)
-    print_statistics(files_by_dir, total_chars, elapsed_time, output_info, input_dir, full_output)
+    print_statistics(files_by_dir, total_chars, elapsed_time, output_info, input_dir, full_output, stats=stats)
 
 
 def main() -> None:

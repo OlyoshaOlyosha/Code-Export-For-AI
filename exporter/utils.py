@@ -4,10 +4,11 @@ This module provides helper functions for directory selection, filename generati
 and statistics printing.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import tiktoken
+from rich.table import Table
 from rich.tree import Tree
 
 from exporter.console import console, error, info, success, warning
@@ -99,6 +100,26 @@ class OutputInfo:
     copy_to_buffer: bool
 
 
+@dataclass
+class ExportStats:
+    """Statistics collected during project scanning.
+
+    Attributes:
+        skipped_binary: Number of files skipped because they could not be read (binary/unreadable).
+        skipped_size: Number of files skipped because they exceeded the size limit.
+        skipped_rules: Number of files skipped due to blacklist rules (extensions, names, directories).
+        extension_counts: Mapping from file extension (without dot) to count of exported files.
+        largest_files: List of (size_in_bytes, relative_path) tuples for the largest candidate files.
+
+    """
+
+    skipped_binary: int = 0
+    skipped_size: int = 0
+    skipped_rules: int = 0
+    extension_counts: dict[str, int] = field(default_factory=dict)
+    largest_files: list[tuple[int, str]] = field(default_factory=list)
+
+
 def print_statistics(
     files_by_dir: dict[str, list[str]],
     total_chars: int,
@@ -106,10 +127,12 @@ def print_statistics(
     output_info: OutputInfo,
     input_dir: str,
     full_output: str,
+    stats: ExportStats | None = None,
 ) -> None:
     """Print formatted statistics after export.
 
-    Uses Rich to render a colour‑coded file tree and to decorate metrics.
+    Order: file tree → basic metrics (time, chars, tokens, dirs/files) →
+    extended statistics (skips, extension table, largest files) → final result.
     """
     num_dirs = len(files_by_dir)
     num_files = sum(len(files) for files in files_by_dir.values())
@@ -123,7 +146,33 @@ def print_statistics(
     else:
         size_str = f"{total_chars / 1024:.1f} KB"
 
-    info("\n=== STATISTICS ===")
+    # ── 1. File tree (moved above statistics) ──
+    info("\nFiles by directory:")
+
+    tree = Tree(f"[blue]{root_name}/[/]", guide_style="bold bright_blue")
+    dir_nodes: dict[str, Tree] = {".": tree}
+
+    for rel_dir in sorted(files_by_dir):
+        if rel_dir == ".":
+            parent_node = tree
+        else:
+            parts = rel_dir.split("/")
+            accumulated = ""
+            parent_node = tree
+            for part in parts:
+                accumulated = f"{accumulated}/{part}" if accumulated else part
+                if accumulated not in dir_nodes:
+                    dir_node = parent_node.add(f"[blue]{part}/[/]")
+                    dir_nodes[accumulated] = dir_node
+                parent_node = dir_nodes[accumulated]
+
+        for filename in sorted(files_by_dir[rel_dir]):
+            parent_node.add(filename)
+
+    console.print(tree)
+
+    # ── 2. Statistics block ──
+    info("=== STATISTICS ===")
 
     # Elapsed time colour thresholds
     time_style = "green" if elapsed_time < 1.0 else ("yellow" if elapsed_time < 5.0 else "red")
@@ -147,34 +196,55 @@ def print_statistics(
     info(f"📁 Directories: {num_dirs}")
     info(f"📄 Files: {num_files}")
 
-    # Build a Rich Tree from the files_by_dir mapping
-    info("\nFiles by directory:")
+    # ── 3. Extended statistics (only when stats is provided and we have enough files) ──
+    if stats is not None and num_files > 10:
+        # --- Skip summary (print only non‑zero counters) ---
+        skip_lines = []
+        if stats.skipped_binary > 0:
+            skip_lines.append(f"⚠️ Binary / unreadable: {stats.skipped_binary}")
+        if stats.skipped_size > 0:
+            skip_lines.append(f"⚖️ Exceeded size limit: {stats.skipped_size}")
+        if stats.skipped_rules > 0:
+            skip_lines.append(f"❌ Excluded by rules: {stats.skipped_rules}")
+        if skip_lines:
+            info("")
+            for line_text in skip_lines:
+                info(line_text)
 
-    tree = Tree(f"[blue]{root_name}/[/]", guide_style="bold bright_blue")
-    # Keep track of already‑created directory nodes keyed by their relative path.
-    dir_nodes: dict[str, Tree] = {".": tree}
+        # --- Top Extensions table ---
+        if stats.extension_counts:
+            sorted_exts = sorted(stats.extension_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+            ext_table = Table(title="Top Extensions")
+            ext_table.add_column("Extension", justify="left")
+            ext_table.add_column("Count", justify="right")
+            ext_table.add_column("%", justify="right")
+            for ext, count in sorted_exts:
+                pct = (count / num_files) * 100 if num_files else 0.0
+                ext_table.add_row(ext, str(count), f"{pct:.1f}%")
+            info("")
+            console.print(ext_table)
 
-    for rel_dir in sorted(files_by_dir):
-        if rel_dir == ".":
-            parent_node = tree
-        else:
-            parts = rel_dir.split("/")
-            accumulated = ""
-            parent_node = tree
-            for part in parts:
-                accumulated = f"{accumulated}/{part}" if accumulated else part
-                if accumulated not in dir_nodes:
-                    dir_node = parent_node.add(f"[blue]{part}/[/]")
-                    dir_nodes[accumulated] = dir_node
-                parent_node = dir_nodes[accumulated]
-            # parent_node is now the node for rel_dir
+        # --- Top‑5 largest files ---
+        if stats.largest_files:
+            sorted_large = sorted(stats.largest_files, key=lambda x: x[0], reverse=True)[:5]
 
-        for filename in sorted(files_by_dir[rel_dir]):
-            parent_node.add(filename)
+            def _format_size(size: int) -> str:
+                """Return a human‑readable size string."""
+                if size >= 1024 * 1024:
+                    return f"{size / 1048576:.1f} MB"
+                if size >= 1024:
+                    return f"{size / 1024:.1f} KB"
+                return f"{size} B"
 
-    console.print(tree)
+            large_table = Table(title="Top 5 Largest Files")
+            large_table.add_column("File", justify="left")
+            large_table.add_column("Size", justify="right")
+            for file_size, file_path in sorted_large:
+                large_table.add_row(file_path, _format_size(file_size))
+            info("")
+            console.print(large_table)
 
-    # Final result line
+    # ── 4. Final result line ──
     result_parts = []
     if output_info.create_file:
         result_parts.append(f"saved to {output_info.output_file}")

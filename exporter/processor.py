@@ -14,6 +14,7 @@ from pathspec import PathSpec
 from exporter.clipboard import copy_to_clipboard
 from exporter.console import error, success, warning
 from exporter.scanner import is_code_file
+from exporter.utils import ExportStats
 
 # Default mapping from file extension to language tag for code fences
 EXTENSION_LANGUAGE_MAP: dict[str, str] = {
@@ -499,7 +500,7 @@ def _collect_files(
     input_dir: str,
     config: dict[str, Any],
     gitignore_spec: PathSpec | None = None,
-) -> tuple[defaultdict[str, list[str]], list[str], set[str], set[str]]:
+) -> tuple[defaultdict[str, list[str]], list[str], set[str], set[str], ExportStats]:
     """Collect files during directory traversal respecting depth limit.
 
     Args:
@@ -514,15 +515,18 @@ def _collect_files(
             - all_content: List of formatted file content chunks.
             - processed_paths: Set of relative paths of included files.
             - extra_dirs: Set of directories that are truncated at depth limit.
+            - stats: Extended statistics (skips, extensions, largest files).
 
     """
     files_by_dir: defaultdict[str, list[str]] = defaultdict(list)
     all_content: list[str] = []
     processed_paths: set[str] = set()
     extra_dirs: set[str] = set()
+    stats = ExportStats()
 
     max_depth = config.get("max_depth", -1)  # -1 = unlimited, 0 = only root, >0 = limited
     input_path = Path(input_dir)
+    max_size = config.get("max_size")  # may be 0 meaning "no limit"
 
     for root, dirs, files in os.walk(input_dir):
         rel_root = Path(root).relative_to(input_dir).as_posix()
@@ -558,6 +562,21 @@ def _collect_files(
                 continue
 
             if not is_code_file(str(file_path), config):
+                stats.skipped_rules += 1
+                continue
+
+            # File passed code‑file filters – collect size for statistics
+            try:
+                file_size = file_path.stat().st_size
+            except OSError:
+                # Inaccessible file – skip it.
+                continue
+
+            stats.largest_files.append((file_size, rel_path))
+
+            # Size limit check
+            if max_size and file_size > max_size:
+                stats.skipped_size += 1
                 continue
 
             export_content = config.get("export_content", True)
@@ -567,19 +586,21 @@ def _collect_files(
             if export_content:
                 content = read_file_content(str(file_path))
                 if content is None:
+                    stats.skipped_binary += 1
                     continue
                 if not include_empty and content == "":
                     continue
             else:
                 # Determine emptiness via file size – fast and avoids I/O.
-                try:
-                    is_empty = file_path.stat().st_size == 0
-                except OSError:
-                    # Inaccessible file – skip it.
-                    continue
+                is_empty = file_size == 0
                 if not include_empty and is_empty:
                     continue
-                content = ""  # not used, but keeps variable defined
+                content = ""  # placeholder
+
+            # File is included → update extension counter
+            ext = file_path.suffix.lower().lstrip(".")
+            ext_key = ext or "<no extension>"
+            stats.extension_counts[ext_key] = stats.extension_counts.get(ext_key, 0) + 1
 
             rel_dir = Path(rel_path).parent.as_posix()
             files_by_dir[rel_dir].append(filename)
@@ -588,11 +609,11 @@ def _collect_files(
             # Build content chunk only if content export is enabled.
             if export_content and content:
                 language = detect_language(str(file_path))
-                lang_tag = language or Path(file_path).suffix.lower().lstrip(".")
+                lang_tag = language or file_path.suffix.lower().lstrip(".")
                 chunk = f"{rel_path}:\n```{lang_tag}\n{content}\n```\n\n"
                 all_content.append(chunk)
 
-    return files_by_dir, all_content, processed_paths, extra_dirs
+    return files_by_dir, all_content, processed_paths, extra_dirs, stats
 
 
 def _build_output(
@@ -646,7 +667,7 @@ def export_project(
     *,
     create_file: bool = True,
     copy_to_buffer: bool = False,
-) -> tuple[dict[str, list[str]], int, str]:
+) -> tuple[dict[str, list[str]], int, str, ExportStats]:
     """Export project: collect files, build output, write to file and/or copy to clipboard.
 
     Args:
@@ -661,6 +682,7 @@ def export_project(
             - files_by_dir: Dictionary mapping directories to lists of file names.
             - total_chars: Total number of characters in the exported content.
             - full_output: The complete exported text (used for statistics/token count).
+            - stats: Extended statistics (skips, extensions, largest files).
 
     """
     input_path = Path(input_dir).resolve()
@@ -672,7 +694,7 @@ def export_project(
         if gitignore_spec is None:
             warning("USE_GITIGNORE is True but .gitignore not found in project root. Continuing without it.")
 
-    files_by_dir, all_content, processed_paths, extra_dirs = _collect_files(
+    files_by_dir, all_content, processed_paths, extra_dirs, stats = _collect_files(
         input_dir, config, gitignore_spec=gitignore_spec
     )
 
@@ -691,4 +713,4 @@ def export_project(
             warning("Output file was not created. Continuing with other operations...")
 
     handle_clipboard_copy(full_output, total_chars, copy_to_buffer=copy_to_buffer, config=config)
-    return files_by_dir, total_chars, full_output
+    return files_by_dir, total_chars, full_output, stats
