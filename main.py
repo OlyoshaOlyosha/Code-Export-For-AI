@@ -15,6 +15,36 @@ from exporter.processor import export_project
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
 
+def load_app_config() -> dict[str, bool]:
+    """Load application-level configuration from app_config.py next to main.py.
+
+    Returns:
+        Dictionary with 'check_for_updates' key (bool). Defaults to True
+        if the file is missing or cannot be loaded.
+
+    """
+    config_path = Path(__file__).parent / "app_config.py"
+    if not config_path.is_file():
+        return {"check_for_updates": True}
+
+    # Dynamically load the module
+    spec = importlib.util.spec_from_file_location("app_config", config_path)
+    if spec is None or spec.loader is None:
+        warning(f"Could not load app config module from {config_path}. Using defaults.")
+        return {"check_for_updates": True}
+
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        # SyntaxError, permission errors, etc.
+        warning(f"Failed to execute app_config.py: {e}. Using defaults.")
+        return {"check_for_updates": True}
+
+    value = getattr(module, "CHECK_FOR_UPDATES", True)
+    return {"check_for_updates": bool(value)}
+
+
 def find_config_files() -> list[Path]:
     """Return a sorted list of .py config files from the 'configs/' directory.
 
