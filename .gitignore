@@ -210,5 +210,6 @@ __marimo__/
 .*rules
 outputs/
 .vscode/
+.claude/
 configs/*
 !configs/config.py
