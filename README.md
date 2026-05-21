@@ -12,6 +12,24 @@ Tool to export any project folder or repository into a single, neatly formatted 
 - Share reproducible context: include relative paths and file order so AI or reviewers can follow the codebase layout.
 - Filter and reduce noise: automatically ignore large binaries, images and common vendor folders to keep the export relevant.
 
+## Table of Contents
+
+- [Why use Code Export For AI](#why-use-code-export-for-ai)
+- [Typical use cases](#typical-use-cases)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation / Requirements](#installation--requirements)
+- [Quickstart](#quickstart)
+  - [CLI Reference](#cli-reference)
+- [Sample output](#sample-output)
+- [How It Works](#how-it-works)
+- [Configuration](#configuration)
+- [Advanced Usage & Tips](#advanced-usage--tips)
+  - [Priority file ordering](#priority-file-ordering)
+  - [Configuration inheritance](#configuration-inheritance)
+  - [Disabling update notifications](#disabling-update-notifications)
+- [Contributing](#contributing)
+
 ## Typical use cases
 - Code review and refactoring requests to AI assistants (send whole project context in one paste).
 - Pair-programming / debugging sessions where you need to show multiple files at once.
@@ -20,7 +38,7 @@ Tool to export any project folder or repository into a single, neatly formatted 
 
 ## Features
 - Recursively scans a directory and collects source files.
-- **Multiple configuration profiles** – place `.py` config files in the `configs/` folder and select one at startup.
+- **Multiple configuration profiles** – place `.py` config files in the `configs/` folder and select one at startup. Each config can include a short description (`CONFIG_DESCRIPTION`) shown in the selection menu.
 - Configurable ignore rules for directories, filenames and extensions (per configuration).
 - Filename filtering with exact or partial matching (`FILENAME_FILTER_MODE`).
 - **.gitignore integration** – automatically respect `.gitignore` rules when `USE_GITIGNORE = True` (reads the `.gitignore` located in the project root).
@@ -30,14 +48,19 @@ Tool to export any project folder or repository into a single, neatly formatted 
 - Option to show empty directories in the structure (`SHOW_EMPTY_DIRS`) and include empty files (only in structure, no code block, `INCLUDE_EMPTY_FILES`).
 - Save output to a file and/or copy to the clipboard.
 - Clipboard safety limit to avoid pasting huge amounts of text accidentally.
-- Print simple statistics (file count, characters, runtime, token estimate).
+- **Progress bar** during file scanning.
+- **Extended statistics**: file tree, token estimate, summary of skipped files (binary/unreadable, too large, excluded by rules), top file extensions, and the 5 largest files included.
+- **Priority-based file ordering** – define `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control the order of files in the output.
+- **Update check** – on startup, can query GitHub for newer releases (configurable in `app_config.py`).
+- **Re-export loop** – after an export, press Enter to run again with the same config, or `N` to exit.
 - Works with CLI or GUI folder picker (Tkinter).
 
 ## Prerequisites
 - **Python 3.10** or higher.
 - **Required packages** (automatically installed, see Installation):
-  - `colorama` – coloured console output.
+  - `rich` – coloured console output and progress bar.
   - `tiktoken` – token count estimation in statistics (uses `o200k_base` encoding).
+  - `pathspec` – parsing `.gitignore` patterns.
 - **Optional**: `pyperclip` for more reliable cross‑platform clipboard support. If not installed, the tool falls back to native utilities:
   - Windows: `clip`
   - macOS: `pbcopy`
@@ -55,7 +78,7 @@ pip install -r requirements.txt
 Or install manually:
 
 ```powershell
-pip install colorama tiktoken
+pip install rich tiktoken pathspec
 # optional, for better clipboard support
 pip install pyperclip
 ```
@@ -80,7 +103,7 @@ python main.py -d "C:\path\to\project" -o export.txt -c python
 - `-o, --output` – output filename (relative to `OUTPUT_DIR/config_name/`; if not given, the default name from configuration is used with an automatic sequential suffix).
 - `-c, --config` – name of a configuration file from the `configs/` folder (e.g., `python` for `configs/python.py`). If omitted, the tool will:
   - automatically use the only config if exactly one `.py` file exists in `configs/`,
-  - show a numbered selection menu if multiple configs are present,
+  - show a numbered selection menu (including config descriptions) if multiple configs are present,
   - fall back to `config.py` in the project root if `configs/` is empty.
 
 ### CLI Reference
@@ -135,10 +158,35 @@ def main():
 
 When `INCLUDE_EMPTY_FILES` is enabled (default), empty files are shown in the structure but have no code block. When `SHOW_EMPTY_DIRS` is enabled, empty directories are also shown.
 
+## How It Works
+
+```mermaid
+flowchart TD
+    A[Project Folder] --> B[Scan files recursively]
+    B --> C{Apply .gitignore & blacklists}
+    C -->|Filter out ignored items| D[Filtered file list]
+    D --> E{Depth & size limits}
+    E -->|Valid files only| F[Selected files]
+    F --> G[Apply priority sorting if configured]
+    G --> H[Read file contents]
+    H --> I[Build output: structure + code blocks]
+    I --> J[Write to file and/or clipboard]
+```
+
+1. **Scanning**: The directory is walked recursively, skipping blacklisted directories, hidden files, and items matched by `.gitignore` (if enabled). The depth limit is enforced during traversal.
+2. **Filtering**: Files are checked against extension blacklists, filename blacklists (exact or partial), size limits, and the extensionless whitelist. A progress bar shows the scanning progress.
+3. **Sorting**: If `PRIORITY_PATTERNS` are defined, files are reordered according to the priority tiers; within each tier they are sorted by directory depth and alphabetically.
+4. **Content reading**: Each remaining file is read with automatic encoding detection (UTF‑8, CP1251, Latin‑1). Binary/unreadable files are skipped.
+5. **Output assembly**: An ASCII tree of the project structure is generated (optionally including empty directories), followed by all file contents wrapped in language‑detected fenced code blocks.
+6. **Delivery**: The final string is written to the output file and/or copied to the clipboard (respecting the clipboard character limit).
+
 ## Configuration
 The script expects configuration files inside the `configs/` folder (or a legacy `config.py` in the project root). Copy the example `config.py` from the repository into `configs/` and adjust it as needed. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and switch between them using the `-c` flag.
 
 **Output location logic:** The final output is saved in a subdirectory named after the configuration file (without `.py`) inside `OUTPUT_DIR`. For example, if `OUTPUT_DIR = "outputs"` and you use `python.py`, files will be placed in `outputs/python/`. The filename derives from `OUTPUT_FILENAME` (or the `-o` argument) and may receive a sequential number to prevent overwrites when running repeatedly.
+
+**Configuration description:**  
+You can add a brief one‑line description to any config file by defining `CONFIG_DESCRIPTION` (e.g., `"Python-only backend project"`). It will appear next to the config name in the interactive selection menu.
 
 Key options (inside a `.py` config file):
 
@@ -153,7 +201,7 @@ Key options (inside a `.py` config file):
 | `MAX_DEPTH` | `-1` | Maximum recursion depth: `-1` = unlimited, `0` = only selected directory, positive integer = max depth. |
 | `OUTPUT_DIR` | `"outputs"` | Base directory where output files are saved. A subfolder with the configuration name will be created automatically. |
 | `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR/config_name/`). |
-| `MAX_FILE_SIZE_MB` | `5` | Maximum file size to include (in MB). |
+| `MAX_FILE_SIZE_MB` | `5` | Maximum file size to include (in MB). Set to `0` to disable the limit; a reminder is printed when this is set to `0`. |
 | `CREATE_FILE` | `True` | Whether to write the output file. **If both `CREATE_FILE` and `COPY_TO_CLIPBOARD` are `False`, file output is enabled automatically.** |
 | `COPY_TO_CLIPBOARD` | `True` | Whether to copy result to clipboard. |
 | `EXPORT_STRUCTURE` | `True` | Include project directory structure (ASCII tree) in output. |
@@ -161,18 +209,42 @@ Key options (inside a `.py` config file):
 | `SHOW_EMPTY_DIRS` | `True` | When `EXPORT_STRUCTURE` is `True`, show empty directories in the tree. |
 | `INCLUDE_EMPTY_FILES` | `True` | When `EXPORT_CONTENT` is `True`, include empty files (only in structure, no code block). |
 | `MAX_CLIPBOARD_CHARS` | `500000` | Maximum characters to copy to clipboard; set to `0` to disable the limit. |
+| `PRIORITY_PATTERNS` | `[]` | List of `fnmatch` patterns for high‑priority files (sorted first). |
+| `LOW_PRIORITY_PATTERNS` | `[]` | List of `fnmatch` patterns for low‑priority files (sorted last). |
 
 > **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will prompt you to enable content export **for this run only** – it does not modify the configuration file.
 
 Language detection for code fences is based on file extension using a built-in mapping (e.g., `.py` → `python`, `.js` → `javascript`). The mapping can be extended by editing the `EXTENSION_LANGUAGE_MAP` dictionary in `exporter/processor.py` if needed.
 
 ## Advanced Usage & Tips
-- For large repositories, increase `MAX_FILE_SIZE_MB` or use `MAX_DEPTH` to limit traversal and keep the export manageable.
+- For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal and keep the export manageable.
 - If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed, or install `pyperclip`.
 - To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in your configuration.
 - If the output is too large for the clipboard, increase `MAX_CLIPBOARD_CHARS` or set it to `0`.
 - Create multiple configuration files in `configs/` for different project types (e.g., Python-only, frontend-only) and switch with `-c`.
 - The final statistics include an approximate token count (relative to a 128k context limit) – this helps gauge how well the export fits into common AI context windows.
+
+### Priority file ordering
+Use `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control the order of files in the export. Patterns are matched against the full relative path using `fnmatch` syntax. Files matched by `PRIORITY_PATTERNS` appear first (ordered by pattern index, then depth, then alphabetically), unmatched files follow in natural order, and files matched by `LOW_PRIORITY_PATTERNS` go to the end.  
+Example for a Python project:
+```python
+PRIORITY_PATTERNS = ["README*", "pyproject.toml", "src/*.py"]
+LOW_PRIORITY_PATTERNS = ["requirements*.txt", "Pipfile*"]
+```
+
+### Configuration inheritance
+Because configuration files are pure Python, you can share common settings by importing a base module. For instance, create a `base.py` with all the common defaults, and in your specific configs do:
+```python
+from configs.base import *
+BLACKLIST_EXTENSIONS.add("sqlite")
+```
+This simplifies maintaining multiple profiles.
+
+### Disabling update notifications
+If you prefer not to be notified about new releases, open `app_config.py` (located next to `main.py`) and set:
+```python
+CHECK_FOR_UPDATES = False
+```
 
 ## Contributing
 Improvements welcome — open an issue or submit a pull request.
