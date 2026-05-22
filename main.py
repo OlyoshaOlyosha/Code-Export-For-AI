@@ -219,6 +219,11 @@ def load_config(config_path: Path) -> dict[str, Any]:
     module = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(module)
+    except SyntaxError as e:
+        error(f"ERROR: Syntax error in configuration file: {e}")
+        info("Tip: check for missing quotes or a backslash at the end of a raw string.")
+        input("\nPress Enter to exit...")
+        raise SystemExit(1)
     except Exception as e:
         error(f"ERROR: Failed to execute configuration file: {e}")
         input("\nPress Enter to exit...")
@@ -288,6 +293,16 @@ def load_config(config_path: Path) -> dict[str, Any]:
     config_dict["blacklist_dirs"] = config_dict.pop("blacklist_dirs")
     config_dict["blacklist_filenames"] = config_dict.pop("blacklist_filenames")
     config_dict["filename_filter_mode"] = config_dict.pop("filename_filter_mode")
+
+    # Optional input directory preset
+    if hasattr(module, "INPUT_DIR"):
+        raw_input = module.INPUT_DIR
+        if not isinstance(raw_input, str):
+            error("ERROR: INPUT_DIR must be a string.")
+            raise SystemExit(1)
+        config_dict["input_dir"] = raw_input.strip()
+    else:
+        config_dict["input_dir"] = ""
 
     # Optional priority sorting patterns
     for attr in ("PRIORITY_PATTERNS", "LOW_PRIORITY_PATTERNS"):
@@ -360,23 +375,59 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def get_input_directory(args: argparse.Namespace) -> str | None:
+def get_input_directory(args: argparse.Namespace, config_input_dir: str) -> str | None:
     """
-    Determine input directory based on command line arguments or user interaction.
+    Determine input directory based on command line arguments, config preset, or user interaction.
+
+    Priority: CLI argument > valid config preset > manual folder selection.
 
     Args:
         args: Parsed command line arguments.
+        config_input_dir: Optional directory preset from the configuration file.
 
     Returns:
         Selected directory path or None if cancelled/invalid.
 
     """
+    # 1. Command-line argument takes highest priority
     if args.directory:
-        if Path(args.directory).is_dir():
-            return args.directory
-        error("The specified directory does not exist!")
-        return None
+        cli_dir = Path(args.directory).resolve()
+        if not cli_dir.is_dir():
+            error("The specified directory does not exist!")
+            return None
 
+        # Inform the user if a config preset was overridden
+        if config_input_dir.strip():
+            try:
+                config_resolved = Path(config_input_dir).expanduser().resolve()
+                # samefile() works cross-platform and is case-insensitive on Windows
+                if not cli_dir.samefile(config_resolved):
+                    info("Using directory from command line (-d). Ignoring INPUT_DIR from config.")
+            except OSError:
+                # config_resolved does not exist – definitely different
+                info("Using directory from command line (-d). Ignoring INPUT_DIR from config.")
+            except Exception:
+                # Path is malformed; ignore comparison
+                pass
+        return str(cli_dir)
+
+    # 2. No CLI argument: try the config preset
+    if config_input_dir.strip():
+        try:
+            resolved = Path(config_input_dir).expanduser().resolve()
+            if resolved.is_dir():
+                return str(resolved)
+            if resolved.exists():
+                warning(
+                    f"INPUT_DIR from config is a file, not a directory: {resolved}\n"
+                    "Falling back to manual folder selection..."
+                )
+            else:
+                warning(f"INPUT_DIR from config does not exist: {resolved}\nFalling back to manual folder selection...")
+        except Exception:
+            warning("INPUT_DIR from config caused an error. Falling back to manual folder selection...")
+
+    # 3. Fallback to GUI or console folder selection
     info("Select the project folder...")
     dir_path = select_directory()
     if not dir_path:
@@ -491,8 +542,8 @@ def main() -> None:
         create_file = config_dict["create_file"]
         copy_to_buffer = config_dict["copy_to_buffer"]
 
-        # 3. Get input directory (use command line arg if provided)
-        input_dir = get_input_directory(args)
+        # 3. Get input directory (use command line arg or config preset)
+        input_dir = get_input_directory(args, config_dict.get("input_dir", ""))
         if not input_dir:
             input("\nPress Enter to exit...")
             return

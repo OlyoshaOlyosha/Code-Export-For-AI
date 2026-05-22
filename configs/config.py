@@ -72,6 +72,14 @@ BLACKLIST_FILENAMES = {"setup.py", "requirements.txt"}
 # Filename matching mode: 'exact' or 'contains'
 FILENAME_FILTER_MODE = "exact"
 
+# Default project directory to export.
+# Can be an absolute path, e.g.:
+#   Windows:  "C:\\Users\\Name\\Projects\\MyApp"
+#   Linux/macOS: "/home/name/Projects/MyApp"
+# You can also use "~" to refer to the home directory, e.g. "~/Projects/MyApp".
+# Leave empty ("") to always prompt for folder selection (GUI or console).
+INPUT_DIR: str = ""
+
 # Output settings
 OUTPUT_DIR = "outputs"  # Default directory for output files
 OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
