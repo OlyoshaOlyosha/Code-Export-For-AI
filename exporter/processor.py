@@ -239,6 +239,10 @@ def _generate_structure_with_empty_dirs(
 
         rel_root = Path(root).relative_to(input_dir).as_posix()
         if rel_root == ".":
+            # Insert first‑level directories into the tree so they show even when empty
+            for d in dirs:
+                if d not in dir_tree:
+                    dir_tree[d] = {}
             continue
 
         # Ensure all parent directories exist in the tree

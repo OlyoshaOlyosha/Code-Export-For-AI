@@ -441,7 +441,17 @@ def perform_export(
 
     elapsed_time = time.time() - start_time
     output_info = OutputInfo(output_file, create_file, copy_to_buffer)
-    print_statistics(files_by_dir, total_chars, elapsed_time, output_info, input_dir, full_output, stats=stats)
+    print_statistics(
+        files_by_dir,
+        total_chars,
+        elapsed_time,
+        output_info,
+        input_dir,
+        full_output,
+        stats=stats,
+        show_empty_dirs=config.get("show_empty_dirs", False),
+        blacklist_dirs=config.get("blacklist_dirs", set()),
+    )
 
 
 def main() -> None:

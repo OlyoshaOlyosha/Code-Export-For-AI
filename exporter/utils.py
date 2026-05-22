@@ -4,6 +4,7 @@ This module provides helper functions for directory selection, filename generati
 and statistics printing.
 """
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -128,6 +129,9 @@ def print_statistics(
     input_dir: str,
     full_output: str,
     stats: ExportStats | None = None,
+    *,
+    show_empty_dirs: bool = False,
+    blacklist_dirs: set[str] | None = None,
 ) -> None:
     """Print formatted statistics after export.
 
@@ -149,24 +153,35 @@ def print_statistics(
     # ── 1. File tree (moved above statistics) ──
     info("\nFiles by directory:")
 
+    # Collect all known directories (from exported files + empty ones from disk)
+    all_dirs: set[str] = set(files_by_dir.keys())
+
+    if show_empty_dirs and blacklist_dirs is not None:
+        input_path = Path(input_dir)
+        for dirpath, dirnames, _ in os.walk(input_dir):
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in blacklist_dirs]
+            rel = Path(dirpath).relative_to(input_path).as_posix()
+            for d in dirnames:
+                accumulated = f"{rel}/{d}" if rel != "." else d
+                all_dirs.add(accumulated)
+
     tree = Tree(f"[blue]{root_name}/[/]", guide_style="bold bright_blue")
     dir_nodes: dict[str, Tree] = {".": tree}
 
-    for rel_dir in sorted(files_by_dir):
-        if rel_dir == ".":
-            parent_node = tree
-        else:
-            parts = rel_dir.split("/")
-            accumulated = ""
-            parent_node = tree
-            for part in parts:
-                accumulated = f"{accumulated}/{part}" if accumulated else part
-                if accumulated not in dir_nodes:
-                    dir_node = parent_node.add(f"[blue]{part}/[/]")
-                    dir_nodes[accumulated] = dir_node
-                parent_node = dir_nodes[accumulated]
+    # Build tree in sorted order — directories first, then files
+    for rel_dir in sorted(all_dirs):
+        parts = rel_dir.split("/")
+        accumulated = ""
+        parent_node = tree
+        for part in parts:
+            accumulated = f"{accumulated}/{part}" if accumulated else part
+            if accumulated not in dir_nodes:
+                dir_node = parent_node.add(f"[blue]{part}/[/]")
+                dir_nodes[accumulated] = dir_node
+            parent_node = dir_nodes[accumulated]
 
-        for filename in sorted(files_by_dir[rel_dir]):
+        # Add any files that belong to this directory
+        for filename in sorted(files_by_dir.get(rel_dir, [])):
             parent_node.add(filename)
 
     console.print(tree)
