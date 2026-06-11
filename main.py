@@ -619,48 +619,90 @@ def main() -> None:
             input("\nPress Enter to exit...")
             return
 
-        # 2. Load and validate configuration
-        config_dict = load_config(config_path)
+        # Capture the ordered list of configs (for later switching by number).
+        # This list is only refreshed once; dynamic additions/removals are not
+        # reflected until the next run.
+        config_files = find_config_files()
 
-        # Append configuration name (without .py) to output directory
-        config_stem = config_path.stem
-        base_output = Path(config_dict["output_dir"])
-        config_dict["output_dir"] = str(base_output / config_stem)
-
-        config_dict = check_export_options(config_dict)
-        if not config_dict:
-            input("\nPress Enter to exit...")
-            return
-
-        # Application-level settings
+        # Application-level settings (checked once)
         app_cfg = load_app_config()
         do_update_check = app_cfg.get("check_for_updates", True)
         if do_update_check:
             check_for_updates(__version__)
 
-        create_file = config_dict["create_file"]
-        copy_to_buffer = config_dict["copy_to_buffer"]
+        # ── Helper to load (or reload) a configuration and apply stem ──────
+        def _prepare_config(cfg_path: Path) -> dict[str, Any] | None:
+            """Load config, append stem to output dir, and validate export options.
 
-        # 3. Get input directory (use command line arg or config preset)
+            Returns the config dict or None if the user chose to exit (e.g., when
+            both export flags are disabled and the user refuses the override).
+            """
+            cfg = load_config(cfg_path)
+            config_stem = cfg_path.stem
+            base_out = Path(cfg["output_dir"])
+            cfg["output_dir"] = str(base_out / config_stem)
+            cfg = check_export_options(cfg)
+            return cfg or None
+
+        # ── First export ───────────────────────────────────────────────────
+        config_dict = _prepare_config(config_path)
+        if not config_dict:
+            input("\nPress Enter to exit...")
+            return
+
         input_dir = get_input_directory(args, config_dict.get("input_dir", ""))
         if not input_dir:
             input("\nPress Enter to exit...")
             return
 
-        # 4. Determine output filename
-        output_file = get_output_filename(args, config_dict, create_file=create_file)
+        output_file = get_output_filename(args, config_dict, create_file=config_dict["create_file"])
+        perform_export(
+            input_dir,
+            output_file,
+            config_dict,
+            create_file=config_dict["create_file"],
+            copy_to_buffer=config_dict["copy_to_buffer"],
+        )
 
-        # 5. Perform the export
-        perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
-
-        # Allow re‑exporting with the same configuration without restarting
+        # ── Interactive re‑export / config switching loop ──────────────────
         while True:
-            answer = prompt("\nExport this config again? (Enter — yes, N — exit): ").strip().lower()
-            if answer and not answer.startswith("y"):
+            answer = prompt("\nExport again? (Enter — same config, number — switch config, N — exit): ").strip().lower()
+
+            if answer == "":
+                # Hot‑reload the *same* config from disk (picks up edits)
+                config_dict = _prepare_config(config_path)
+                if not config_dict:
+                    break
+                # Keep the same project directory – no re‑prompt
+            elif answer.isdigit():
+                idx = int(answer) - 1
+                if 0 <= idx < len(config_files):
+                    config_path = config_files[idx]
+                    config_dict = _prepare_config(config_path)
+                    if not config_dict:
+                        break
+                    # Switching to a different config → re‑determine directory
+                    input_dir = get_input_directory(args, config_dict.get("input_dir", ""))
+                    if not input_dir:
+                        break
+                else:
+                    error("Invalid config number.")
+                    continue
+            elif answer == "n":
                 break
-            # Recompute the output filename so that the uniqueness counter advances
-            output_file = get_output_filename(args, config_dict, create_file=create_file)
-            perform_export(input_dir, output_file, config_dict, create_file=create_file, copy_to_buffer=copy_to_buffer)
+            else:
+                error("Invalid input. Press Enter, type a number, or N.")
+                continue
+
+            # (Re)compute output filename (always advances the counter)
+            output_file = get_output_filename(args, config_dict, create_file=config_dict["create_file"])
+            perform_export(
+                input_dir,
+                output_file,
+                config_dict,
+                create_file=config_dict["create_file"],
+                copy_to_buffer=config_dict["copy_to_buffer"],
+            )
 
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")
