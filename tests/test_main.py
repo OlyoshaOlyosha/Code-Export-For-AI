@@ -46,13 +46,13 @@ class TestFindConfigFiles:
             assert result == expected, f"Expected {expected}, got {result}"
 
     def test_handles_oserror_and_returns_empty(self) -> None:
-        """When iterdir raises OSError, return [] and warn."""
+        """When rglob raises OSError, return [] and warn."""
         with (
             patch("main.Path") as mock_path,
             patch("main.warning") as mock_warning,
         ):
             mock_path.return_value.is_dir.return_value = True
-            mock_path.return_value.iterdir.side_effect = OSError("Permission denied")
+            mock_path.return_value.rglob.side_effect = OSError("Permission denied")
             from main import find_config_files
 
             result = find_config_files()
@@ -140,7 +140,7 @@ class TestSelectConfigFile:
             result = select_config_file(None)
             assert result.resolve() == config_file.resolve(), f"Expected {config_file}, got {result}"
             mock_info.assert_called_once()
-            assert "only.py" in mock_info.call_args[0][0]
+            assert "only" in mock_info.call_args[0][0]
 
     def test_multiple_configs_prompt_valid_choice(
         self, mock_input: MagicMock, mock_console: dict[str, MagicMock], tmp_path: Path
@@ -464,7 +464,7 @@ class TestGetInputDirectory:
         args = argparse.Namespace(directory=str(d))
         from main import get_input_directory
 
-        result = get_input_directory(args)
+        result = get_input_directory(args, "")
         assert result == str(d), f"Expected {d}, got {result}"
 
     def test_directory_arg_not_a_directory(self, tmp_path: Path) -> None:
@@ -476,7 +476,7 @@ class TestGetInputDirectory:
         with patch("main.error") as mock_error:
             from main import get_input_directory
 
-            result = get_input_directory(args)
+            result = get_input_directory(args, "")
             assert result is None, "Expected None for non-directory"
             mock_error.assert_called()
 
@@ -492,7 +492,7 @@ class TestGetInputDirectory:
         ):
             from main import get_input_directory
 
-            result = get_input_directory(args)
+            result = get_input_directory(args, "")
             assert result == str(selected), f"Expected {selected}, got {result}"
             mock_info.assert_called()
 
@@ -506,7 +506,7 @@ class TestGetInputDirectory:
         ):
             from main import get_input_directory
 
-            result = get_input_directory(args)
+            result = get_input_directory(args, "")
             assert result is None, "Expected None when selection cancelled"
             mock_error.assert_called()
 
@@ -607,3 +607,400 @@ class TestPerformExport:
             assert output_info_arg.output_file == "/out.txt"
             assert output_info_arg.create_file is True
             assert output_info_arg.copy_to_buffer is False
+
+
+# ---------------------------------------------------------------------------
+# load_app_config
+# ---------------------------------------------------------------------------
+class TestLoadAppConfig:
+    def test_config_exists_returns_true(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "app_config.py"
+        config_file.write_text("CHECK_FOR_UPDATES = True\n")
+        with patch("main.Path", return_value=config_file):
+            from main import load_app_config
+
+            result = load_app_config()
+        assert result == {"check_for_updates": True}
+
+    def test_config_exists_returns_false(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "app_config.py"
+        config_file.write_text("CHECK_FOR_UPDATES = False\n")
+        with patch("main.Path", return_value=config_file):
+            from main import load_app_config
+
+            result = load_app_config()
+        assert result == {"check_for_updates": False}
+
+    def test_config_missing_defaults_to_true(self) -> None:
+        with patch("main.Path.is_file", return_value=False):
+            from main import load_app_config
+
+            result = load_app_config()
+        assert result == {"check_for_updates": True}
+
+    def test_spec_none_logs_warning_and_defaults(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "app_config.py"
+        config_file.touch()
+        with (
+            patch("main.Path", return_value=config_file),
+            patch("importlib.util.spec_from_file_location", return_value=None),
+            patch("main.warning") as mock_warn,
+        ):
+            from main import load_app_config
+
+            result = load_app_config()
+        assert result == {"check_for_updates": True}
+        mock_warn.assert_called_once()
+
+    def test_exec_module_raises_logs_warning_and_defaults(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "app_config.py"
+        config_file.touch()
+        with (
+            patch("main.Path", return_value=config_file),
+            patch("main.warning") as mock_warn,
+            patch("importlib.util.spec_from_file_location") as mock_spec,
+        ):
+            mock_loader = MagicMock()
+            mock_loader.exec_module.side_effect = SyntaxError("bad")
+            mock_spec.return_value.loader = mock_loader
+            from main import load_app_config
+
+            result = load_app_config()
+        assert result == {"check_for_updates": True}
+        mock_warn.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _get_config_description
+# ---------------------------------------------------------------------------
+class TestGetConfigDescription:
+    def test_simple_description(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text('CONFIG_DESCRIPTION = "A short description"\n')
+        from main import _get_config_description
+
+        assert _get_config_description(cfg) == "A short description"
+
+    def test_multiline_uses_first_non_empty_line(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text('CONFIG_DESCRIPTION = """\n\n  First line  \n  Second\n"""\n')
+        from main import _get_config_description
+
+        assert _get_config_description(cfg) == "First line"
+
+    def test_long_description_truncated(self, tmp_path: Path) -> None:
+        long_desc = "A" * 100
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text(f'CONFIG_DESCRIPTION = "{long_desc}"\n')
+        from main import _get_config_description
+
+        result = _get_config_description(cfg)
+        assert len(result) == 80
+        assert result.endswith("...")
+
+    def test_no_variable_returns_none(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text("OTHER = 42\n")
+        from main import _get_config_description
+
+        assert _get_config_description(cfg) is None
+
+    def test_non_string_value_returns_none(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text("CONFIG_DESCRIPTION = 123\n")
+        from main import _get_config_description
+
+        assert _get_config_description(cfg) is None
+
+    def test_syntax_error_returns_none(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text("CONFIG_DESCRIPTION = incomplete\n")
+        from main import _get_config_description
+
+        assert _get_config_description(cfg) is None
+
+    def test_read_error_returns_none(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "cfg.py"
+        cfg.write_text('CONFIG_DESCRIPTION = "ok"')
+        with patch.object(Path, "read_text", side_effect=OSError("denied")):
+            from main import _get_config_description
+
+            assert _get_config_description(cfg) is None
+
+
+# ---------------------------------------------------------------------------
+# _resolve_config_path
+# ---------------------------------------------------------------------------
+class TestResolveConfigPath:
+    def test_absolute_path_exists(self, tmp_path: Path) -> None:
+        p = tmp_path / "abs.py"
+        p.touch()
+        from main import _resolve_config_path
+
+        assert _resolve_config_path(str(p)) == p
+
+    def test_absolute_path_missing(self) -> None:
+        from main import _resolve_config_path
+
+        assert _resolve_config_path("/no/such/path.py") is None
+
+    def test_inside_configs_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        configs = tmp_path / "configs"
+        configs.mkdir()
+        cfg = configs / "dev.py"
+        cfg.touch()
+        monkeypatch.chdir(tmp_path)
+        from main import _resolve_config_path
+
+        result = _resolve_config_path("dev.py")
+        assert result is not None
+        assert result.resolve() == cfg.resolve()
+
+    def test_relative_to_cwd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        cfg = tmp_path / "local.py"
+        cfg.touch()
+        monkeypatch.chdir(tmp_path)
+        from main import _resolve_config_path
+
+        result = _resolve_config_path("local.py")
+        assert result is not None
+        assert result.resolve() == cfg.resolve()
+
+    def test_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        from main import _resolve_config_path
+
+        assert _resolve_config_path("ghost.py") is None
+
+
+# ---------------------------------------------------------------------------
+# Additional get_input_directory scenarios
+# ---------------------------------------------------------------------------
+class TestGetInputDirectoryAdditional:
+    def test_config_input_dir_valid_used(self, tmp_path: Path) -> None:
+        preset = tmp_path / "preset"
+        preset.mkdir()
+        args = argparse.Namespace(directory=None)
+        from main import get_input_directory
+
+        assert get_input_directory(args, str(preset)) == str(preset)
+
+    def test_config_input_dir_is_file_warns_and_fallsback(self, tmp_path: Path) -> None:
+        f = tmp_path / "file.txt"
+        f.touch()
+        args = argparse.Namespace(directory=None)
+        with (
+            patch("main.warning") as mock_warn,
+            patch("main.select_directory", return_value=str(tmp_path)),
+        ):
+            from main import get_input_directory
+
+            result = get_input_directory(args, str(f))
+        mock_warn.assert_called_once()
+        assert result == str(tmp_path)
+
+    def test_config_input_dir_nonexistent_warns_and_fallsback(self, tmp_path: Path) -> None:
+        args = argparse.Namespace(directory=None)
+        with (
+            patch("main.warning") as mock_warn,
+            patch("main.select_directory", return_value=str(tmp_path)),
+        ):
+            from main import get_input_directory
+
+            result = get_input_directory(args, "/ghost")
+        mock_warn.assert_called_once()
+        assert result == str(tmp_path)
+
+    def test_cli_overrides_config_preset(self, tmp_path: Path) -> None:
+        cli_dir = tmp_path / "cli"
+        cli_dir.mkdir()
+        preset_dir = tmp_path / "preset"
+        preset_dir.mkdir()
+        args = argparse.Namespace(directory=str(cli_dir))
+        from main import get_input_directory
+
+        assert get_input_directory(args, str(preset_dir)) == str(cli_dir)
+
+
+# ---------------------------------------------------------------------------
+# Additional load_config scenarios
+# ---------------------------------------------------------------------------
+class TestLoadConfigAdditional:
+    @pytest.fixture
+    def base_valid_content(self) -> str:
+        return (
+            "BLACKLIST_EXTENSIONS = set()\n"
+            "BLACKLIST_DIRS = set()\n"
+            "BLACKLIST_FILENAMES = set()\n"
+            "FILENAME_FILTER_MODE = 'exact'\n"
+            "OUTPUT_DIR = 'out'\n"
+            "OUTPUT_FILENAME = 'out.txt'\n"
+            "MAX_FILE_SIZE_MB = 5\n"
+            "CREATE_FILE = True\n"
+            "COPY_TO_CLIPBOARD = False\n"
+            "INCLUDE_EMPTY_FILES = True\n"
+            "EXPORT_STRUCTURE = True\n"
+            "EXPORT_CONTENT = True\n"
+            "SHOW_EMPTY_DIRS = False\n"
+            "MAX_CLIPBOARD_CHARS = 5000\n"
+            "MAX_DEPTH = -1\n"
+            "USE_GITIGNORE = False\n"
+            "ALLOWED_EXTENSIONLESS_FILES = set()\n"
+        )
+
+    def test_input_dir_present_in_config(self, tmp_path: Path, base_valid_content: str) -> None:
+        content = base_valid_content + 'INPUT_DIR = "/some/path"\n'
+        cfg = tmp_path / "config.py"
+        cfg.write_text(content)
+        from main import load_config
+
+        result = load_config(cfg)
+        assert result["input_dir"] == "/some/path"
+
+    def test_input_dir_wrong_type_exits(self, tmp_path: Path, base_valid_content: str) -> None:
+        content = base_valid_content + "INPUT_DIR = 123\n"
+        cfg = tmp_path / "config.py"
+        cfg.write_text(content)
+        from main import load_config
+
+        with pytest.raises(SystemExit, match="1"):
+            load_config(cfg)
+
+    def test_priority_patterns_loaded(self, tmp_path: Path, base_valid_content: str) -> None:
+        content = base_valid_content + 'PRIORITY_PATTERNS = ["*.py"]\nLOW_PRIORITY_PATTERNS = ["*.txt"]\n'
+        cfg = tmp_path / "config.py"
+        cfg.write_text(content)
+        from main import load_config
+
+        result = load_config(cfg)
+        assert result["priority_patterns"] == ["*.py"]
+        assert result["low_priority_patterns"] == ["*.txt"]
+
+    def test_priority_patterns_wrong_type_exits(self, tmp_path: Path, base_valid_content: str) -> None:
+        content = base_valid_content + "PRIORITY_PATTERNS = '*.py'\n"
+        cfg = tmp_path / "config.py"
+        cfg.write_text(content)
+        from main import load_config
+
+        with pytest.raises(SystemExit, match="1"):
+            load_config(cfg)
+
+    def test_max_file_size_zero_logs_info(self, tmp_path: Path, base_valid_content: str) -> None:
+        content = base_valid_content.replace("MAX_FILE_SIZE_MB = 5", "MAX_FILE_SIZE_MB = 0")
+        cfg = tmp_path / "config.py"
+        cfg.write_text(content)
+        with patch("main.info") as mock_info:
+            from main import load_config
+
+            load_config(cfg)
+        mock_info.assert_any_call(
+            "MAX_FILE_SIZE_MB = 0 — file size limit disabled. All files will be included regardless of size."
+        )
+
+
+# ---------------------------------------------------------------------------
+# _display_config_tree
+# ---------------------------------------------------------------------------
+class TestDisplayConfigTree:
+    def test_empty_list_produces_no_output(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from main import _display_config_tree
+
+        _display_config_tree([])
+        assert capsys.readouterr().out == ""
+
+    def test_single_file_with_description(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        configs_dir = tmp_path / "configs"
+        configs_dir.mkdir()
+        cfg = configs_dir / "test.py"
+        cfg.write_text('CONFIG_DESCRIPTION = "My config"\n')
+        with patch("main.Path", wraps=Path) as mock_path:
+            mock_path.side_effect = lambda p: configs_dir if p == "configs" else Path(p)
+            from main import _display_config_tree
+
+            _display_config_tree([cfg])
+        captured = capsys.readouterr().out
+        assert "1. test" in captured
+        assert "My config" in captured
+
+
+# ---------------------------------------------------------------------------
+# Additional perform_export checks
+# ---------------------------------------------------------------------------
+class TestPerformExportAdditional:
+    def test_logs_directory_and_output_paths(
+        self,
+        sample_config_dict: dict[str, Any],
+    ) -> None:
+        from main import perform_export
+
+        with (
+            patch("main.info") as mock_info,
+            patch("main.export_project", return_value=({}, 0, "", MagicMock())),
+            patch("main.print_statistics"),
+            patch("main.time.time", side_effect=[1.0, 2.0]),
+        ):
+            perform_export(
+                input_dir="/my/project",
+                output_file="/out.txt",
+                config=sample_config_dict,
+                create_file=False,
+                copy_to_buffer=False,
+            )
+        info_calls = [c[0][0] for c in mock_info.call_args_list]
+        assert any("Directory: /my/project" in msg for msg in info_calls)
+        assert any("Output file: /out.txt" in msg for msg in info_calls)
+
+
+# ---------------------------------------------------------------------------
+# Minimal main() integration test
+# ---------------------------------------------------------------------------
+class TestMainIntegration:
+    def test_single_run_exports_and_quits(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_input: MagicMock,
+    ) -> None:
+        configs_dir = tmp_path / "configs"
+        configs_dir.mkdir()
+        cfg = configs_dir / "test.py"
+        cfg.write_text(
+            "BLACKLIST_EXTENSIONS = set()\n"
+            "BLACKLIST_DIRS = set()\n"
+            "BLACKLIST_FILENAMES = set()\n"
+            "FILENAME_FILTER_MODE = 'exact'\n"
+            "OUTPUT_DIR = 'out'\n"
+            "OUTPUT_FILENAME = 'out.txt'\n"
+            "MAX_FILE_SIZE_MB = 5\n"
+            "CREATE_FILE = True\n"
+            "COPY_TO_CLIPBOARD = False\n"
+            "INCLUDE_EMPTY_FILES = True\n"
+            "EXPORT_STRUCTURE = True\n"
+            "EXPORT_CONTENT = True\n"
+            "SHOW_EMPTY_DIRS = False\n"
+            "MAX_CLIPBOARD_CHARS = 5000\n"
+            "MAX_DEPTH = -1\n"
+            "USE_GITIGNORE = False\n"
+            "ALLOWED_EXTENSIONLESS_FILES = set()\n"
+        )
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        (project_dir / "main.py").write_text("print(1)")
+        monkeypatch.chdir(tmp_path)
+        mock_input.side_effect = ["n"]
+
+        with (
+            patch("sys.argv", ["main.py"]),
+            patch("main.check_for_updates"),
+            patch("main.select_directory", return_value=str(project_dir)),
+            patch(
+                "main.export_project",
+                return_value=({".": ["main.py"]}, 100, "fake output", MagicMock()),
+            ) as mock_export,
+            patch("main.print_statistics"),
+            patch("main.check_export_options", side_effect=lambda cfg: cfg),
+        ):
+            from main import main
+
+            main()
+            mock_export.assert_called_once()
