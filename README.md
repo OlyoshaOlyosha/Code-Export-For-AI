@@ -28,6 +28,7 @@ Tool to export any project folder or repository into a single, neatly formatted 
   - [Priority file ordering](#priority-file-ordering)
   - [Configuration inheritance](#configuration-inheritance)
   - [Disabling update notifications](#disabling-update-notifications)
+  - [Re‑export loop details](#re-export-loop-details)
 - [Contributing](#contributing)
 
 ## Typical use cases
@@ -38,7 +39,7 @@ Tool to export any project folder or repository into a single, neatly formatted 
 
 ## Features
 - Recursively scans a directory and collects source files.
-- **Multiple configuration profiles** – place `.py` config files in the `configs/` folder and select one at startup. Each config can include a short description (`CONFIG_DESCRIPTION`) shown in the selection menu.
+- **Multiple configuration profiles** – place `.py` config files in the `configs/` folder (or any subdirectory) and select one at startup. Each config can include a short description (`CONFIG_DESCRIPTION`) shown in the selection menu.
 - Configurable ignore rules for directories, filenames and extensions (per configuration).
 - Filename filtering with exact or partial matching (`FILENAME_FILTER_MODE`).
 - **.gitignore integration** – automatically respect `.gitignore` rules when `USE_GITIGNORE = True` (reads the `.gitignore` located in the project root).
@@ -52,7 +53,7 @@ Tool to export any project folder or repository into a single, neatly formatted 
 - **Extended statistics**: file tree, token estimate, summary of skipped files (binary/unreadable, too large, excluded by rules), top file extensions, and the 5 largest files included.
 - **Priority-based file ordering** – define `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control the order of files in the output.
 - **Update check** – on startup, can query GitHub for newer releases (configurable in `app_config.py`).
-- **Re-export loop** – after an export, press Enter to run again with the same config, or `N` to exit.
+- **Interactive re‑export loop** – after an export, press Enter to run again with the same config (hot‑reloading edits), enter a number to switch to a different configuration, or `N` to exit.
 - Works with CLI or GUI folder picker (Tkinter).
 
 ## Prerequisites
@@ -61,10 +62,8 @@ Tool to export any project folder or repository into a single, neatly formatted 
   - `rich` – coloured console output and progress bar.
   - `tiktoken` – token count estimation in statistics (uses `o200k_base` encoding).
   - `pathspec` – parsing `.gitignore` patterns.
-- **Optional**: `pyperclip` for more reliable cross‑platform clipboard support. If not installed, the tool falls back to native utilities:
-  - Windows: `clip`
-  - macOS: `pbcopy`
-  - Linux: `xclip` or `xsel` (at least one must be available)
+  - `pyperclip` – reliable cross‑platform clipboard support (fallback to native utilities if missing).
+- **Linux only**: If `pyperclip` is unavailable, at least one of `xclip` or `xsel` must be installed for clipboard support.
 
 ## Installation / Requirements
 1. Clone the repository or download the source.
@@ -75,15 +74,11 @@ Tool to export any project folder or repository into a single, neatly formatted 
 pip install -r requirements.txt
 ```
 
-Or install manually:
+Or install manually (not recommended if you want the full feature set):
 
 ```powershell
-pip install rich tiktoken pathspec
-# optional, for better clipboard support
-pip install pyperclip
+pip install rich tiktoken pathspec pyperclip
 ```
-
-> **Note**: `tiktoken` is mandatory and used for token counting shown in the statistics summary.
 
 ## Quickstart
 1. Open a terminal in the `Code Export For AI` folder.
@@ -101,9 +96,9 @@ python main.py -d "C:\path\to\project" -o export.txt -c python
 
 - `-d, --directory` – path to project folder (if omitted, a GUI folder picker opens).
 - `-o, --output` – output filename (relative to `OUTPUT_DIR/config_name/`; if not given, the default name from configuration is used with an automatic sequential suffix).
-- `-c, --config` – name of a configuration file from the `configs/` folder (e.g., `python` for `configs/python.py`). If omitted, the tool will:
-  - automatically use the only config if exactly one `.py` file exists in `configs/`,
-  - show a numbered selection menu (including config descriptions) if multiple configs are present,
+- `-c, --config` – name of a configuration file from the `configs/` folder (e.g., `python` for `configs/python.py`). If the file is not found, `.py` is appended automatically. You may also provide an absolute path or a path relative to the current working directory. If omitted, the tool will:
+  - automatically use the only config if exactly one `.py` file exists in `configs/` (including subdirectories),
+  - show a tree‑style numbered selection menu (including config descriptions) if multiple configs are present,
   - fall back to `config.py` in the project root if `configs/` is empty.
 
 ### CLI Reference
@@ -111,7 +106,7 @@ python main.py -d "C:\path\to\project" -o export.txt -c python
 |----------|-------|-------------|
 | `--directory` | `-d` | Path to the project directory to export. If not provided, a graphical folder picker opens (falls back to console input if GUI is unavailable). |
 | `--output` | `-o` | Output file path. Relative paths are resolved inside the effective output directory (`OUTPUT_DIR/config_name/`). If omitted, the default name from the configuration is used and a unique suffix (e.g. `_1`, `_2`) is appended to avoid overwriting. |
-| `--config` | `-c` | Name of the configuration file to use. Accepts a filename relative to `configs/` (e.g. `python` → `configs/python.py`), an absolute path, or a path relative to the current working directory. When not specified, the tool automatically selects or prompts for a configuration (see above). |
+| `--config` | `-c` | Name of the configuration file to use. Accepts a filename relative to `configs/` (e.g., `python` → `configs/python.py`), an absolute path, or a path relative to the current working directory. If the name has no `.py` extension and is not found, `.py` is appended automatically. When not specified, the tool automatically selects or prompts for a configuration (see above). |
 
 Clipboard support is cross-platform: the tool uses `pyperclip` when available, otherwise falls back to native utilities (`clip`, `pbcopy`, `xclip`/`xsel`).
 
@@ -181,23 +176,23 @@ flowchart TD
 6. **Delivery**: The final string is written to the output file and/or copied to the clipboard (respecting the clipboard character limit).
 
 ## Configuration
-The script expects configuration files inside the `configs/` folder (or a legacy `config.py` in the project root). Copy the example `config.py` from the repository into `configs/` and adjust it as needed. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and switch between them using the `-c` flag.
+The script expects configuration files inside the `configs/` folder (or a legacy `config.py` in the project root). Copy the example `config.py` from the repository into `configs/` and adjust it as needed. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and organise them into subdirectories for grouping (e.g., `configs/backend/python.py`). The selection menu displays a tree with continuous numbering, showing the relative path (without `.py`) and the optional `CONFIG_DESCRIPTION`.
 
 **Output location logic:** The final output is saved in a subdirectory named after the configuration file (without `.py`) inside `OUTPUT_DIR`. For example, if `OUTPUT_DIR = "outputs"` and you use `python.py`, files will be placed in `outputs/python/`. The filename derives from `OUTPUT_FILENAME` (or the `-o` argument) and may receive a sequential number to prevent overwrites when running repeatedly.
 
 **Configuration description:**  
-You can add a brief one‑line description to any config file by defining `CONFIG_DESCRIPTION` (e.g., `"Python-only backend project"`). It will appear next to the config name in the interactive selection menu.
+You can add a brief one‑line description to any config file by defining `CONFIG_DESCRIPTION` (e.g., `"Python-only backend project"`). It will appear next to the config name in the interactive selection tree.
 
 Key options (inside a `.py` config file):
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `BLACKLIST_EXTENSIONS` | Set of extensions (e.g., `"png"`, `"jpg"`, `"txt"`, `"md"`, `"log"`, `"pyc"`) | File extensions to ignore. |
+| `BLACKLIST_EXTENSIONS` | `{"txt", "md", "markdown", "log", "pdf", …}` (see template) | File extensions to ignore (without dot). |
 | `ALLOWED_EXTENSIONLESS_FILES` | `{"Dockerfile", "Makefile", "README", "LICENSE"}` | Filenames without extension that should be included. |
-| `BLACKLIST_DIRS` | Set of directory names | Directories to skip (e.g., `node_modules`, `.git`, `__pycache__`). |
-| `BLACKLIST_FILENAMES` | Set of filenames | Specific filenames to ignore. |
+| `BLACKLIST_DIRS` | `{"__pycache__", ".git", ".vscode", "node_modules", …}` | Directories to skip (names, not paths). |
+| `BLACKLIST_FILENAMES` | `{"setup.py", "requirements.txt"}` | Specific filenames to ignore. |
 | `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
-| `USE_GITIGNORE` | `True` | If `True`, also respect `.gitignore` rules in addition to blacklists. The `.gitignore` file must be in the root of the exported project. |
+| `USE_GITIGNORE` | `True` | If `True`, also respect `.gitignore` rules in addition to blacklists. The `.gitignore` file must be in the root of the exported project. **Note:** if the setting is absent from the config, it defaults to `False`; the supplied template sets it to `True`. |
 | `MAX_DEPTH` | `-1` | Maximum recursion depth: `-1` = unlimited, `0` = only selected directory, positive integer = max depth. |
 | `OUTPUT_DIR` | `"outputs"` | Base directory where output files are saved. A subfolder with the configuration name will be created automatically. |
 | `OUTPUT_FILENAME` | `"output.txt"` | Base name for output file (placed inside `OUTPUT_DIR/config_name/`). |
@@ -209,8 +204,9 @@ Key options (inside a `.py` config file):
 | `SHOW_EMPTY_DIRS` | `True` | When `EXPORT_STRUCTURE` is `True`, show empty directories in the tree. |
 | `INCLUDE_EMPTY_FILES` | `True` | When `EXPORT_CONTENT` is `True`, include empty files (only in structure, no code block). |
 | `MAX_CLIPBOARD_CHARS` | `500000` | Maximum characters to copy to clipboard; set to `0` to disable the limit. |
-| `PRIORITY_PATTERNS` | `[]` | List of `fnmatch` patterns for high‑priority files (sorted first). |
-| `LOW_PRIORITY_PATTERNS` | `[]` | List of `fnmatch` patterns for low‑priority files (sorted last). |
+| `INPUT_DIR` (optional) | `""` | Default project directory preset. Can be an absolute path, a path with `~`, or empty to always prompt. Overridden by `-d`. |
+| `PRIORITY_PATTERNS` (optional) | `[]` | List of `fnmatch` patterns for high‑priority files (sorted first). |
+| `LOW_PRIORITY_PATTERNS` (optional) | `[]` | List of `fnmatch` patterns for low‑priority files (sorted last). |
 
 > **Note:** If both `EXPORT_STRUCTURE` and `EXPORT_CONTENT` are set to `False`, the script will prompt you to enable content export **for this run only** – it does not modify the configuration file.
 
@@ -218,11 +214,12 @@ Language detection for code fences is based on file extension using a built-in m
 
 ## Advanced Usage & Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal and keep the export manageable.
-- If you rely on clipboard copying on Linux, ensure `xclip` or `xsel` is installed, or install `pyperclip`.
+- Clipboard copying on Linux requires `pyperclip` (installed by default) or at least one of `xclip`/`xsel`.
 - To export only the project structure (without file contents), set `EXPORT_CONTENT = False` in your configuration.
 - If the output is too large for the clipboard, increase `MAX_CLIPBOARD_CHARS` or set it to `0`.
-- Create multiple configuration files in `configs/` for different project types (e.g., Python-only, frontend-only) and switch with `-c`.
+- Create multiple configuration files in `configs/` for different project types (e.g., Python-only, frontend-only) and switch with `-c`. You may organise them in subdirectories; the tree menu shows their relative paths.
 - The final statistics include an approximate token count (relative to a 128k context limit) – this helps gauge how well the export fits into common AI context windows.
+- If a configuration file changes, pressing Enter in the re‑export loop reloads it from disk, so edits are picked up without restarting.
 
 ### Priority file ordering
 Use `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control the order of files in the export. Patterns are matched against the full relative path using `fnmatch` syntax. Files matched by `PRIORITY_PATTERNS` appear first (ordered by pattern index, then depth, then alphabetically), unmatched files follow in natural order, and files matched by `LOW_PRIORITY_PATTERNS` go to the end.  
@@ -245,6 +242,14 @@ If you prefer not to be notified about new releases, open `app_config.py` (locat
 ```python
 CHECK_FOR_UPDATES = False
 ```
+
+### Re‑export loop details
+After an export completes, the tool prompts: `"Export again? (Enter — same config, number — switch config, N — exit)"`.
+- Press **Enter** to re‑export the same directory using the same configuration. The configuration file is **re‑loaded from disk**, so you can edit it between runs without leaving the tool.
+- Enter a **number** corresponding to a config file from the tree to switch to that configuration. When switching, if the new config has an `INPUT_DIR` preset, it will be used (or you will be asked for a directory again if the preset is empty/invalid).
+- Press **N** to exit.
+
+This loop lets you iterate quickly on export parameters or toggle between project subsets.
 
 ## Contributing
 Improvements welcome — open an issue or submit a pull request.
