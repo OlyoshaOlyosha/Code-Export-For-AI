@@ -91,13 +91,81 @@ def _get_config_description(config_path: Path) -> str | None:
         return None
 
 
-def find_config_files() -> list[Path]:
-    """Return a sorted list of .py config files from the 'configs/' directory.
+def _display_config_tree(config_files: list[Path]) -> None:
+    """Display configuration files as a directory tree with continuous numbering.
 
-    Excludes __init__.py and hidden files.
+    The tree is printed to stdout. Files are numbered in the order they appear
+    in *config_files*, which must already be sorted deterministically.
+
+    Args:
+        config_files: The sorted list of ``.py`` config paths found by
+                      ``find_config_files()``.
+
+    """
+    configs_dir = Path("configs")
+
+    # Collect descriptions once, outside the rendering loop.
+    descriptions: dict[Path, str | None] = {}
+    for path in config_files:
+        descriptions[path] = _get_config_description(path)
+
+    # Build a tree of nested dicts from relative paths.
+    # Keys are directory names; '__files__' holds a list of
+    # (display_name, full_path, description).
+    tree: dict = {}
+    for path in config_files:
+        rel = path.relative_to(configs_dir)
+        parts = rel.parts
+        display_name = path.stem  # filename without .py
+
+        node = tree
+        for part in parts[:-1]:  # directories leading to the file
+            if part not in node:
+                node[part] = {}
+            node = node[part]
+
+        if "__files__" not in node:
+            node["__files__"] = []
+        node["__files__"].append((display_name, path, descriptions[path]))
+
+    # Recursive renderer – mutates *counter_ref* (a 1‑element list) so the
+    # numbering is continuous across the whole tree.
+    def render_node(node: dict, prefix: str = "", counter_ref: list[int] | None = None) -> None:
+        if counter_ref is None:
+            counter_ref = [1]
+
+        dirs = sorted([k for k in node if k != "__files__"])
+        files = sorted(node.get("__files__", []), key=lambda x: x[0])  # sort by display name
+
+        items = dirs + files  # directories first, then files
+        for i, item in enumerate(items):
+            is_last = i == len(items) - 1
+            pointer = "└── " if is_last else "├── "
+
+            if isinstance(item, str):  # directory
+                print(f"{prefix}{pointer}{item}/")
+                extension = "    " if is_last else "│   "
+                render_node(node[item], prefix + extension, counter_ref)
+            else:  # file: (display_name, path, desc)
+                display, _path, desc = item
+                number = counter_ref[0]
+                counter_ref[0] += 1
+                if desc:
+                    print(f"{prefix}{pointer}{number}. {display} – {desc}")
+                else:
+                    print(f"{prefix}{pointer}{number}. {display}")
+
+    render_node(tree)
+
+
+def find_config_files() -> list[Path]:
+    """Return a sorted list of .py config files from the 'configs/' directory tree.
+
+    Recursively searches subdirectories. Excludes any path whose components
+    start with a dot, as well as ``__init__.py`` files.
 
     Returns:
-        List of Path objects, sorted alphabetically. Returns empty list on error.
+        Sorted list of Path objects. Returns empty list on error.
 
     """
     configs_dir = Path("configs")
@@ -105,16 +173,20 @@ def find_config_files() -> list[Path]:
         return []
 
     try:
-        config_files = [
-            p
-            for p in configs_dir.iterdir()
-            if p.suffix == ".py" and p.name != "__init__.py" and not p.name.startswith(".")
-        ]
+        valid_paths: list[Path] = []
+        for p in configs_dir.rglob("*.py"):
+            # Skip files whose relative path contains a hidden component
+            if any(part.startswith(".") for part in p.relative_to(configs_dir).parts):
+                continue
+            if p.name == "__init__.py":
+                continue
+            valid_paths.append(p)
     except OSError as e:
-        warning(f"Cannot read 'configs/' directory: {e}")
+        warning(f"Cannot read 'configs/' directory tree: {e}")
         return []
 
-    return sorted(config_files)
+    # Sort by relative path for deterministic output
+    return sorted(valid_paths, key=lambda p: str(p.relative_to(configs_dir)))
 
 
 def _resolve_config_path(name: str) -> Path | None:
@@ -153,7 +225,7 @@ def select_config_file(requested_config: str | None) -> Path | None:
            already end with ``.py``.
         2. Otherwise, look inside 'configs/':
             - If exactly one .py file, use it automatically.
-            - If multiple, display a numbered list and prompt the user.
+            - If multiple, display a tree with continuous numbering and prompt the user.
         3. Fall back to root 'config.py' if 'configs/' is empty or missing.
 
     Args:
@@ -184,17 +256,17 @@ def select_config_file(requested_config: str | None) -> Path | None:
     config_files = find_config_files()
     if config_files:
         if len(config_files) == 1:
-            info(f"Using configuration: {config_files[0].stem}")
+            # Show relative path without .py extension
+            rel = config_files[0].relative_to(Path("configs"))
+            if rel.parent != Path():
+                display_name = f"{rel.parent.as_posix()}/{rel.stem}"
+            else:
+                display_name = rel.stem
+            info(f"Using configuration: {display_name}")
             return config_files[0]
 
-        # Multiple configs – prompt user, show names without .py extension
-        print("\nAvailable configurations:")
-        for idx, path in enumerate(config_files, start=1):
-            description = _get_config_description(path)
-            if description is not None:
-                print(f"  {idx}. {path.stem} – {description}")
-            else:
-                print(f"  {idx}. {path.stem}")
+        # Multiple configs – display tree with continuous numbering
+        _display_config_tree(config_files)
         while True:
             choice = prompt("Select configuration number: ").strip()
             try:
