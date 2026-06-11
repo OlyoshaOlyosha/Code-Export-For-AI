@@ -117,11 +117,40 @@ def find_config_files() -> list[Path]:
     return sorted(config_files)
 
 
+def _resolve_config_path(name: str) -> Path | None:
+    """Resolve a configuration name to an existing Path, without extension magic.
+
+    Checks, in order:
+      1. Absolute path (must exist).
+      2. Relative path inside the ``configs/`` directory.
+      3. Relative path from the current working directory.
+
+    Args:
+        name: The raw string supplied by the user (may or may not include ``.py``).
+
+    Returns:
+        A ``Path`` to the existing file, or ``None`` if nothing matches.
+
+    """
+    candidate = Path(name)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+
+    candidate = Path("configs") / name
+    if candidate.exists():
+        return candidate
+
+    candidate = Path(name)
+    return candidate if candidate.exists() else None
+
+
 def select_config_file(requested_config: str | None) -> Path | None:
     """Determine which configuration file to use.
 
     Priority:
         1. If --config is provided, use that file from 'configs/' (or as absolute path).
+           Automatically appends ``.py`` if the raw input is not found as‑is and does not
+           already end with ``.py``.
         2. Otherwise, look inside 'configs/':
             - If exactly one .py file, use it automatically.
             - If multiple, display a numbered list and prompt the user.
@@ -136,38 +165,36 @@ def select_config_file(requested_config: str | None) -> Path | None:
     """
     # 1. Explicit --config argument
     if requested_config:
-        candidate = Path(requested_config)
-        if candidate.is_absolute():
-            if candidate.exists():
+        candidate = _resolve_config_path(requested_config)
+        if candidate is not None:
+            return candidate
+
+        # If the user omitted the .py extension, try appending it as a fallback.
+        if not requested_config.endswith(".py"):
+            fallback = requested_config + ".py"
+            candidate = _resolve_config_path(fallback)
+            if candidate is not None:
                 return candidate
-            error(f"Configuration file not found: {candidate}")
-            return None
-        # Relative: look inside configs/ first
-        candidate = Path("configs") / requested_config
-        if candidate.exists():
-            return candidate
-        # Also try as relative path from current directory
-        candidate = Path(requested_config)
-        if candidate.exists():
-            return candidate
-        error(f"Configuration file not found: {requested_config}")
+            error(f"Configuration file not found: {requested_config} (also tried {fallback})")
+        else:
+            error(f"Configuration file not found: {requested_config}")
         return None
 
     # 2. Automatic selection from configs/
     config_files = find_config_files()
     if config_files:
         if len(config_files) == 1:
-            info(f"Using configuration: {config_files[0].name}")
+            info(f"Using configuration: {config_files[0].stem}")
             return config_files[0]
 
-        # Multiple configs – prompt user
+        # Multiple configs – prompt user, show names without .py extension
         print("\nAvailable configurations:")
         for idx, path in enumerate(config_files, start=1):
             description = _get_config_description(path)
             if description is not None:
-                print(f"  {idx}. {path.name} – {description}")
+                print(f"  {idx}. {path.stem} – {description}")
             else:
-                print(f"  {idx}. {path.name}")
+                print(f"  {idx}. {path.stem}")
         while True:
             choice = prompt("Select configuration number: ").strip()
             try:
