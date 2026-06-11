@@ -23,6 +23,8 @@ ignore = [
     "RUF003",  # Allow ambiguous cyrillic characters in comments
     "S605",    # Start process with a shell: check for injection
     "S607",    # Start process with a partial path
+    "S105",    # False positive: ordinary words mistaken for passwords
+    "S310",    # Fixed GitHub URL with timeout – no SSRF risk
 ]
 
 [tool.ruff.lint.per-file-ignores]
