@@ -40,6 +40,22 @@ ignore = [
     "PLC0415", # Local imports for cache clearing/mocking are fine
     "BLE001",  # Allow catching broad exceptions in test assertions
     "PLR0913", # Allow many arguments (mocks/fixtures) in tests
+    "ANN001",  # Missing type annotation for argument
+    "ANN002",  # Missing type annotation for *args
+    "ANN003",  # Missing type annotation for **kwargs
+    "ANN202",  # Missing return type for private function
+    "ANN401",  # Allow Any type in tests
+    "ARG002",  # Unused method argument (e.g., in mocks)
+    "ARG005",  # Unused lambda argument
+    "D101",    # Undocumented public class (test class)
+    "D102",    # Undocumented public method (test method)
+    "EM101",   # Raw string in exception
+    "FBT001",  # Boolean type hint for positional argument
+    "FBT003",  # Boolean literal in positional call
+    "INP001",  # Implicit namespace package (no __init__.py)
+    "PTH103",  # Use of os.makedirs instead of pathlib
+    "RUF059",  # Unused unpacked variable (e.g., _)
+    "SIM117",  # Multiple with statements (keep separate for readability)
 ]
 
 [tool.pytest.ini_options]
