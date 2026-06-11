@@ -165,7 +165,9 @@ def find_config_files() -> list[Path]:
     start with a dot, as well as ``__init__.py`` files.
 
     Returns:
-        Sorted list of Path objects. Returns empty list on error.
+        Sorted list of Path objects that matches the order used by
+        ``_display_config_tree`` (subdirectory files first, root files last,
+        alphabetical within groups). Returns empty list on error.
 
     """
     configs_dir = Path("configs")
@@ -185,8 +187,22 @@ def find_config_files() -> list[Path]:
         warning(f"Cannot read 'configs/' directory tree: {e}")
         return []
 
-    # Sort by relative path for deterministic output
-    return sorted(valid_paths, key=lambda p: str(p.relative_to(configs_dir)))
+    # Sort to match the depth‑first numbering produced by _display_config_tree.
+    # Directory components receive priority (0, name) over the final file
+    # component (1, stem), so that all files in subdirectories appear before
+    # root files, and each directory's own files come after its subdirectory
+    # files.
+    def _tree_sort_key(p: Path) -> tuple[tuple[int, str], ...]:
+        rel = p.relative_to(configs_dir)
+        parts = list(rel.parts)
+        stem = p.stem  # file name without .py, as shown in the tree
+        key: list[tuple[int, str]] = []
+        for part in parts[:-1]:
+            key.append((0, part))
+        key.append((1, stem))
+        return tuple(key)
+
+    return sorted(valid_paths, key=_tree_sort_key)
 
 
 def _resolve_config_path(name: str) -> Path | None:
