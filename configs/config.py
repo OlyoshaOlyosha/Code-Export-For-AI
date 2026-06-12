@@ -1,5 +1,5 @@
 """
-User configuration for Code Export For AI.
+User configuration for Project2Prompt.
 
 Edit this file to customize filtering and behavior.
 """

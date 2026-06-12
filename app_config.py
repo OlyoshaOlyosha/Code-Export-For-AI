@@ -1,4 +1,4 @@
-"""Application-level configuration for Code Export For AI.
+"""Application-level configuration for Project2Prompt.
 
 Edit this file to control runtime behaviour of the tool itself.
 """

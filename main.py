@@ -1,5 +1,5 @@
 """
-Code Export for AI - Main module.
+Project2Prompt - Main module.
 
 This module provides the entry point for exporting code projects to a single file for AI review.
 """
@@ -622,7 +622,7 @@ def perform_export(
 
 def main() -> None:
     __version__ = "1.4.0"
-    __app_name__ = "Code Export For AI"
+    __app_name__ = "Project2Prompt"
 
     try:
         header(f"{__app_name__} v{__version__}")

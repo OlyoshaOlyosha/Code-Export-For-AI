@@ -1,4 +1,4 @@
-"""Utility to check for newer versions of Code Export For AI from GitHub releases."""
+"""Utility to check for newer versions of Project2Prompt from GitHub releases."""
 
 import json
 import urllib.error
@@ -19,7 +19,7 @@ def check_for_updates(current_version: str) -> None:
         current_version: The running version string (e.g., "1.3.0").
 
     """
-    url = "https://api.github.com/repos/OlyoshaOlyosha/Code-Export-For-AI/releases/latest"
+    url = "https://api.github.com/repos/OlyoshaOlyosha/Project2Prompt/releases/latest"
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             data = json.loads(response.read().decode("utf-8"))
@@ -34,7 +34,7 @@ def check_for_updates(current_version: str) -> None:
             warning(
                 f"A new version {tag_name} is available! "
                 f"You are running v{current_version}. "
-                f"Visit https://github.com/OlyoshaOlyosha/Code-Export-For-AI/releases"
+                f"Visit https://github.com/OlyoshaOlyosha/Project2Prompt/releases"
             )
     except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, ValueError, OSError) as e:
         warning(f"Could not check for updates: {e}")
