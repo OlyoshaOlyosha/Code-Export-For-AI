@@ -368,6 +368,8 @@ def generate_project_structure(
     processed_paths: set[str],
     config: dict[str, Any],
     gitignore_spec: PathSpec | None = None,
+    *,
+    show_empty_dirs: bool | None = None,
 ) -> str:
     """Generate clean ASCII tree of the project structure based on processed relative paths.
 
@@ -376,12 +378,15 @@ def generate_project_structure(
         processed_paths: Set of relative paths that were processed.
         config: Configuration dictionary (used for show_empty_dirs flag).
         gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
+        show_empty_dirs: Explicit override for SHOW_EMPTY_DIRS; if None, falls back to config.
 
     Returns:
         A string representation of the project structure as an ASCII tree.
 
     """
-    if config.get("show_empty_dirs", False):
+    use_empty_dirs = show_empty_dirs if show_empty_dirs is not None else config.get("show_empty_dirs", False)
+
+    if use_empty_dirs:
         return _generate_structure_with_empty_dirs(input_dir, processed_paths, config, gitignore_spec)
 
     # Original method (without empty dirs)
@@ -437,6 +442,8 @@ def build_full_output(
     all_content: list[str],
     config: dict[str, Any],
     gitignore_spec: PathSpec | None = None,
+    *,
+    show_empty_dirs_override: bool | None = None,
 ) -> str:
     """Build the complete output: project structure (if enabled) and file contents.
 
@@ -446,6 +453,7 @@ def build_full_output(
         all_content: List of strings with file contents (formatted with syntax highlighting).
         config: Configuration dictionary.
         gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
+        show_empty_dirs_override: If not None, overrides SHOW_EMPTY_DIRS from config.
 
     Returns:
         The complete output string to be written or copied.
@@ -454,7 +462,12 @@ def build_full_output(
     parts: list[str] = []
 
     if config.get("export_structure", True):
-        structure = generate_project_structure(input_dir, processed_paths, config, gitignore_spec)
+        show_empty = (
+            show_empty_dirs_override if show_empty_dirs_override is not None else config.get("show_empty_dirs", False)
+        )
+        structure = generate_project_structure(
+            input_dir, processed_paths, config, gitignore_spec, show_empty_dirs=show_empty
+        )
         parts.append(structure)
 
     if config.get("export_content", True):
@@ -507,6 +520,7 @@ def _collect_files(
     input_dir: str,
     config: dict[str, Any],
     gitignore_spec: PathSpec | None = None,
+    delta_since: float | None = None,
 ) -> tuple[defaultdict[str, list[str]], list[str], set[str], set[str], ExportStats]:
     """Collect files during directory traversal respecting depth limit.
 
@@ -583,18 +597,22 @@ def _collect_files(
                     stats.skipped_rules += 1
                     continue
 
-                # File passed code‑file filters – collect size for statistics
+                # File passed code‑file filters – collect size and mtime
                 try:
-                    file_size = file_path.stat().st_size
+                    st = file_path.stat()
+                    file_size = st.st_size
+                    file_mtime = st.st_mtime
                 except OSError:
                     # Inaccessible file – skip it.
                     continue
 
-                stats.largest_files.append((file_size, rel_path))
-
                 # Size limit check
                 if max_size and file_size > max_size:
                     stats.skipped_size += 1
+                    continue
+
+                # Delta filter – skip files not modified after delta_since
+                if delta_since is not None and file_mtime <= delta_since:
                     continue
 
                 export_content = config.get("export_content", True)
@@ -619,6 +637,9 @@ def _collect_files(
                 ext = file_path.suffix.lower().lstrip(".")
                 ext_key = ext or "<no extension>"
                 stats.extension_counts[ext_key] = stats.extension_counts.get(ext_key, 0) + 1
+
+                # Record file size only after all filters passed (for accurate Top‑5 table)
+                stats.largest_files.append((file_size, rel_path))
 
                 rel_dir = Path(rel_path).parent.as_posix()
                 files_by_dir[rel_dir].append(filename)
@@ -681,6 +702,7 @@ def _build_output(
     extra_dirs: set[str],
     config: dict[str, Any],
     gitignore_spec: PathSpec | None = None,
+    delta_since: float | None = None,
 ) -> str:
     """Build the final output string, respecting the configured depth limit.
 
@@ -695,6 +717,7 @@ def _build_output(
         extra_dirs: Directories that were truncated because of depth limit.
         config: Configuration dictionary.
         gitignore_spec: Compiled .gitignore patterns for empty-dirs mode, or None.
+        delta_since: Timestamp for delta export; if set, empty directories are hidden.
 
     Returns:
         Complete output string (structure + contents).
@@ -702,8 +725,16 @@ def _build_output(
     """
     max_depth = config.get("max_depth", -1)
     if max_depth == -1:
-        # Unlimited depth: use the full output (respects SHOW_EMPTY_DIRS)
-        return build_full_output(input_dir, processed_paths, all_content, config, gitignore_spec)
+        # Unlimited depth: use the full output (respects SHOW_EMPTY_DIRS, but
+        # force them off in delta mode to show only modified files)
+        return build_full_output(
+            input_dir,
+            processed_paths,
+            all_content,
+            config,
+            gitignore_spec=gitignore_spec,
+            show_empty_dirs_override=False if delta_since is not None else None,
+        )
 
     # Depth is limited (0 = only root, >0 = limited)
     structure = _generate_structure_with_depth(input_dir, processed_paths, extra_dirs)
@@ -725,6 +756,7 @@ def export_project(
     *,
     create_file: bool = True,
     copy_to_buffer: bool = False,
+    delta_since: float | None = None,
 ) -> tuple[dict[str, list[str]], int, str, ExportStats]:
     """Export project: collect files, build output, write to file and/or copy to clipboard.
 
@@ -753,11 +785,20 @@ def export_project(
             warning("USE_GITIGNORE is True but .gitignore not found in project root. Continuing without it.")
 
     files_by_dir, all_content, processed_paths, extra_dirs, stats = _collect_files(
-        input_dir, config, gitignore_spec=gitignore_spec
+        input_dir,
+        config,
+        gitignore_spec=gitignore_spec,
+        delta_since=delta_since,
     )
 
     full_output = _build_output(
-        input_dir, processed_paths, all_content, extra_dirs, config, gitignore_spec=gitignore_spec
+        input_dir,
+        processed_paths,
+        all_content,
+        extra_dirs,
+        config,
+        gitignore_spec=gitignore_spec,
+        delta_since=delta_since,
     )
     total_chars = len(full_output)
 

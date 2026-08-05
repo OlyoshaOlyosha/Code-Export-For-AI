@@ -594,6 +594,7 @@ def perform_export(
     *,
     create_file: bool,
     copy_to_buffer: bool,
+    delta_since: float | None = None,
 ) -> None:
     """Perform the export and print statistics."""
     info(f"Directory: {input_dir}")
@@ -602,7 +603,12 @@ def perform_export(
     start_time = time.time()
 
     files_by_dir, total_chars, full_output, stats = export_project(
-        input_dir, output_file, config, create_file=create_file, copy_to_buffer=copy_to_buffer
+        input_dir,
+        output_file,
+        config,
+        create_file=create_file,
+        copy_to_buffer=copy_to_buffer,
+        delta_since=delta_since,
     )
 
     elapsed_time = time.time() - start_time
@@ -617,6 +623,7 @@ def perform_export(
         stats=stats,
         show_empty_dirs=config.get("show_empty_dirs", False),
         blacklist_dirs=config.get("blacklist_dirs", set()),
+        delta_mode=delta_since is not None,
     )
 
 
@@ -680,16 +687,30 @@ def main() -> None:
             copy_to_buffer=config_dict["copy_to_buffer"],
         )
 
+        current_mode: str = "full"
+        last_full_export_time: float = time.time()  # baseline for delta (modified since last full)
+
         # ── Interactive re‑export / config switching loop ──────────────────
         while True:
-            answer = prompt("\nExport again? (Enter — same config, number — switch config, N — exit): ").strip().lower()
+            answer = (
+                prompt("\nExport again? (Enter — same, number — switch config, M — modified, F — full, N — exit): ")
+                .strip()
+                .lower()
+            )
 
             if answer == "":
-                # Hot‑reload the *same* config from disk (picks up edits)
+                # Repeat current mode (hot‑reload the same config from disk)
+                mode = current_mode
                 config_dict = _prepare_config(config_path)
                 if not config_dict:
                     break
-                # Keep the same project directory – no re‑prompt
+            elif answer == "m":
+                current_mode = "delta"
+                mode = "delta"
+            elif answer == "f":
+                current_mode = "full"
+                last_full_export_time = time.time()  # reset baseline immediately for this full export
+                mode = "full"
             elif answer.isdigit():
                 idx = int(answer) - 1
                 if 0 <= idx < len(config_files):
@@ -697,18 +718,31 @@ def main() -> None:
                     config_dict = _prepare_config(config_path)
                     if not config_dict:
                         break
-                    # Switching to a different config → re‑determine directory
+                    # Switching to a different config → reset delta state
                     input_dir = get_input_directory(args, config_dict.get("input_dir", ""))
                     if not input_dir:
                         break
+                    current_mode = "full"
+                    last_full_export_time = None  # will be set after the upcoming full export
+                    mode = "full"
                 else:
                     error("Invalid config number.")
                     continue
             elif answer == "n":
                 break
             else:
-                error("Invalid input. Press Enter, type a number, or N.")
+                error("Invalid input. Press Enter, type a number, M, F, or N.")
                 continue
+
+            # Determine delta_since for this export (based on last full export time)
+            if mode == "delta":
+                if last_full_export_time is None:
+                    mode = "full"
+                    delta_since = None
+                else:
+                    delta_since = last_full_export_time
+            else:
+                delta_since = None
 
             # (Re)compute output filename (always advances the counter)
             output_file = get_output_filename(args, config_dict, create_file=config_dict["create_file"])
@@ -718,7 +752,11 @@ def main() -> None:
                 config_dict,
                 create_file=config_dict["create_file"],
                 copy_to_buffer=config_dict["copy_to_buffer"],
+                delta_since=delta_since,
             )
+            # Update full-export baseline only when mode was full
+            if mode == "full":
+                last_full_export_time = time.time()
 
     except KeyboardInterrupt:
         print("\n\nOperation cancelled by user.")

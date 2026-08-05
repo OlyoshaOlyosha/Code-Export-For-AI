@@ -132,6 +132,7 @@ def print_statistics(
     *,
     show_empty_dirs: bool = False,
     blacklist_dirs: set[str] | None = None,
+    delta_mode: bool = False,
 ) -> None:
     """Print formatted statistics after export.
 
@@ -156,7 +157,7 @@ def print_statistics(
     # Collect all known directories (from exported files + empty ones from disk)
     all_dirs: set[str] = set(files_by_dir.keys())
 
-    if show_empty_dirs and blacklist_dirs is not None:
+    if show_empty_dirs and not delta_mode and blacklist_dirs is not None:
         input_path = Path(input_dir)
         for dirpath, dirnames, _ in os.walk(input_dir):
             dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in blacklist_dirs]
@@ -212,7 +213,7 @@ def print_statistics(
     info(f"📄 Files: {num_files}")
 
     # ── 3. Extended statistics (only when stats is provided and we have enough files) ──
-    if stats is not None and num_files > 10:
+    if stats is not None and num_files > 0:
         # --- Skip summary (print only non‑zero counters) ---
         skip_lines = []
         if stats.skipped_binary > 0:
