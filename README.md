@@ -28,6 +28,7 @@
 - [Advanced Usage & Tips](#advanced-usage--tips)
   - [Priority file ordering](#priority-file-ordering)
   - [Configuration inheritance](#configuration-inheritance)
+  - [Delta exports (modified files only)](#delta-exports-modified-files-only)
   - [Disabling update notifications](#disabling-update-notifications)
   - [Re‑export loop details](#re-export-loop-details)
 - [Contributing](#contributing)
@@ -47,12 +48,12 @@
 - **Extended statistics** – file tree, token estimate, summary of skipped files, top file extensions, and the 5 largest files included.
 - **Priority‑based file ordering** – define `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control the output order.
 - **Update check** – optionally queries GitHub for newer releases (configurable via `app_config.py`).
-- **Interactive re‑export loop** – after an export, press Enter to run again with the same config (hot‑reloading edits), type a number to switch to another config, or `N` to exit.
+- **Interactive re‑export loop** – after an export you can repeat the same run, switch config, or choose between a full re‑export and a **delta export** (only files modified since the last full export).
 - Works with CLI or a GUI folder picker (Tkinter).
 
 ## Prerequisites
 - **Python 3.10** or higher.
-- **Required packages** (installed automatically, see Installation):
+- **Required packages** (install automatically, see Installation):
   - `rich` – coloured console output and progress bar.
   - `tiktoken` – token count estimation (uses `o200k_base` encoding).
   - `pathspec` – parsing `.gitignore` patterns.
@@ -194,7 +195,12 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 - If the output is too big for the clipboard, raise `MAX_CLIPBOARD_CHARS` or set it to `0`.
 - Create multiple config profiles in `configs/` (even in subdirectories) and switch with `-c` or via the re‑export loop.
 - Statistics show an approximate token count (vs a 128k context limit), helping you gauge whether the export fits common AI windows.
-- In the re‑export loop, pressing **Enter** reloads the current config from disk – edits are picked up without restarting.
+- In the re‑export loop:
+  - **Enter** – repeat the same mode (full or delta), reloading the config from disk.
+  - **number** – switch to another config from the tree.
+  - **M** – switch to delta mode (export only files modified after the last full export).
+  - **F** – force a full re‑export (reset the delta baseline).
+  - **N** – exit.
 
 ### Priority file ordering
 Define `PRIORITY_PATTERNS` and `LOW_PRIORITY_PATTERNS` to control file order. Patterns are `fnmatch` rules matched against the full relative path. Files in `PRIORITY_PATTERNS` appear first (ordered by pattern index, then depth, then alphabetically); unmatched files follow; `LOW_PRIORITY_PATTERNS` files go last.
@@ -215,6 +221,15 @@ BLACKLIST_EXTENSIONS.add("sqlite")
 
 This simplifies maintaining multiple profiles.
 
+### Delta exports (modified files only)
+After a full export you can create an incremental snapshot containing **only the files that have changed** since that full run. This is useful when you want to update an AI with your latest edits without re‑sending the entire project.
+
+- **Activate delta mode** by pressing `M` in the re‑export loop.
+- The tool remembers the timestamp of the last full export and includes only files modified after that moment.
+- The project tree in delta mode shows only the changed files and their parent directories (no empty folders).
+- To go back to a complete export, press `F` – this also resets the baseline so that the next `M` will compare against this new full export.
+- Delta mode works with the same output file numbering, so your incremental snapshots are saved separately (e.g., `output_2.txt` after a delta, `output_3.txt` after another delta).
+
 ### Disabling update notifications
 If you prefer not to be notified about new releases, open `app_config.py` (next to `main.py`) and set:
 
@@ -223,12 +238,17 @@ CHECK_FOR_UPDATES = False
 ```
 
 ### Re‑export loop details
-After an export the tool prompts: `"Export again? (Enter — same config, number — switch config, N — exit)"`.
-- **Enter** – re‑export with the same directory and configuration (config is re‑loaded from disk, so you can edit it between runs).
-- **Number** – switch to another config from the tree. If the new config has an `INPUT_DIR` preset, it is used; otherwise you’ll be asked for a directory again.
+After an export the tool prompts:
+
+`Export again? (Enter — same, number — switch config, M — modified, F — full, N — exit)`
+
+- **Enter** – re‑export with the same directory and configuration. The current mode (full or delta) is preserved. The config file is reloaded from disk so you can edit it between runs.
+- **Number** – switch to another config from the tree. If the new config has an `INPUT_DIR` preset, it is used; otherwise you’ll be asked for a directory again. The mode resets to a full export (new baseline).
+- **M** – toggle **delta mode**. Only files changed since the last full export are collected. The prompt will show `M` as the current mode in subsequent iterations.
+- **F** – force a full export. This also sets a new baseline timestamp, so the next `M` will only pick up changes after this point.
 - **N** – exit.
 
-This loop lets you iterate quickly on export parameters or toggle between project subsets.
+This loop lets you iterate quickly, send partial updates, or experiment with different configurations without restarting the tool.
 
 ## Contributing
 Improvements are welcome – open an issue or submit a pull request.
