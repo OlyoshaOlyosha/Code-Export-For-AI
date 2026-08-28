@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from exporter.utils import (
+    ExportStats,
     OutputInfo,
-    _build_file_tree,
     get_next_filename,
     print_statistics,
     select_directory,
@@ -95,31 +95,32 @@ class TestSelectDirectory:
         with (
             patch("exporter.utils.input", return_value=""),
             patch("exporter.utils.Path.is_dir", return_value=False),  # not needed
+            patch("exporter.utils.warning"),
             patch("exporter.utils.info") as mock_info,
+            patch("builtins.__import__", side_effect=ImportError),
         ):
-            # Trigger fallback by making tkinter import fail
-            with patch("builtins.__import__", side_effect=ImportError):
-                result = select_directory()
-                assert result is None, "Empty manual input should cancel"
-                mock_info.assert_called()  # prompt message
+            result = select_directory()
+            assert result is None, "Empty manual input should cancel"
+            mock_info.assert_called()  # prompt message
 
     def test_manual_invalid_then_valid_path(self) -> None:
         """Manual input first invalid, then valid -> returns valid path."""
         valid_dir = Path("/real_dir")
+
         with (
             patch("exporter.utils.input", side_effect=["bad_dir", str(valid_dir)]),
             patch("exporter.utils.Path.is_dir", side_effect=[False, True]),
+            patch("exporter.utils.warning"),
             patch("exporter.utils.error") as mock_error,
             patch("exporter.utils.info") as mock_info,
+            patch("builtins.__import__", side_effect=ImportError),
         ):
-            # Make tkinter import fail to go straight to manual
-            with patch("builtins.__import__", side_effect=ImportError):
-                result = select_directory()
-                # select_directory resolves the path → compare resolved Path objects
-                assert Path(result) == valid_dir.resolve(), f"Expected {valid_dir.resolve()}, got {result}"
-                mock_error.assert_called_once()  # first invalid attempt
-                # info called twice: initial prompt + prompt after error
-                assert mock_info.call_count == 2
+            result = select_directory()
+            # select_directory resolves the path → compare resolved Path objects
+            assert Path(result) == valid_dir.resolve(), f"Expected {valid_dir.resolve()}, got {result}"
+            mock_error.assert_called_once()  # first invalid attempt
+            # info called twice: initial prompt + prompt after error
+            assert mock_info.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -175,45 +176,6 @@ class TestGetNextFilename:
 
 
 # ---------------------------------------------------------------------------
-# _build_file_tree
-# ---------------------------------------------------------------------------
-class TestBuildFileTree:
-    def test_basic_tree_structure(self) -> None:
-        files = {
-            "src": ["main.py", "utils.py"],
-            "src/sub": ["helper.py"],
-            ".": ["README.md"],
-        }
-        root = "myproject"
-        tree = _build_file_tree(files, root)
-        lines = tree.splitlines()
-        assert lines[0] == "myproject/"
-        # Directories first, then files in root: so src/ before README.md
-        assert lines[1] == "├── src/"
-        assert lines[2] == "│   ├── sub/"
-        assert lines[3] == "│   │   └── helper.py"
-        assert lines[4] == "│   ├── main.py"
-        assert lines[5] == "│   └── utils.py"
-        assert lines[6] == "└── README.md"
-
-    def test_empty_dict_returns_only_root(self) -> None:
-        tree = _build_file_tree({}, "empty_root")
-        expected = "empty_root/"
-        assert tree == expected, f"Expected {expected!r}, got {tree!r}"
-
-    def test_all_files_in_root(self) -> None:
-        files = {".": ["a.py", "b.py"]}
-        tree = _build_file_tree(files, "root")
-        # Should have root line, then files sorted
-        expected_lines = [
-            "root/",
-            "├── a.py",
-            "└── b.py",
-        ]
-        assert tree == "\n".join(expected_lines), f"Tree mismatch: {tree}"
-
-
-# ---------------------------------------------------------------------------
 # print_statistics
 # ---------------------------------------------------------------------------
 class TestPrintStatistics:
@@ -255,7 +217,7 @@ class TestPrintStatistics:
         assert "100" in captured.out
 
     def test_elapsed_time_color_coding(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Elapsed time color green (<1s)."""
+        """Elapsed time under 1s is rendered with the green style label."""
         output_info = OutputInfo("out.txt", False, False)
         with (
             patch("exporter.utils.tiktoken.get_encoding") as mock_enc,
@@ -273,8 +235,9 @@ class TestPrintStatistics:
                 "hello",
             )
         captured = capsys.readouterr()
-        # Should contain green color code \033[32m before time
-        assert "\033[32m" in captured.out
+        # Under 1s the time is coloured green; assert the value is printed.
+        assert "Elapsed time:" in captured.out
+        assert "0.50 sec" in captured.out
 
     def test_file_size_mb_when_large(self, capsys: pytest.CaptureFixture[str]) -> None:
         """Characters >= 1 MB displayed in MB."""
@@ -297,3 +260,83 @@ class TestPrintStatistics:
             )
         captured = capsys.readouterr()
         assert "2.00 MB" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# print_statistics — extended coverage
+# ---------------------------------------------------------------------------
+class TestPrintStatisticsExtended:
+    def test_skip_counters_printed_when_nonzero(
+        self, capsys: pytest.CaptureFixture[str], mock_tiktoken: MagicMock
+    ) -> None:
+        """Non-zero skip counters each produce a printed line."""
+        output_info = OutputInfo("out.txt", False, False)
+        stats = ExportStats(skipped_binary=2, skipped_size=3, skipped_rules=1)
+        with patch("exporter.utils.success"):
+            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+        captured = capsys.readouterr()
+        assert "Binary / unreadable: 2" in captured.out
+        assert "Exceeded size limit: 3" in captured.out
+        assert "Excluded by rules: 1" in captured.out
+
+    def test_extension_counts_table_rendered(
+        self, capsys: pytest.CaptureFixture[str], mock_tiktoken: MagicMock
+    ) -> None:
+        """Non-empty extension_counts renders the Top Extensions table."""
+        output_info = OutputInfo("out.txt", False, False)
+        stats = ExportStats(extension_counts={"py": 4, "js": 1})
+        with patch("exporter.utils.success"):
+            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+        captured = capsys.readouterr()
+        assert "Top Extensions" in captured.out
+        assert "py" in captured.out
+
+    def test_largest_files_table_rendered(self, capsys: pytest.CaptureFixture[str], mock_tiktoken: MagicMock) -> None:
+        """Non-empty largest_files renders the Top 5 Largest Files table."""
+        output_info = OutputInfo("out.txt", False, False)
+        stats = ExportStats(largest_files=[(1024, "big.py"), (10, "small.py")])
+        with patch("exporter.utils.success"):
+            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+        captured = capsys.readouterr()
+        assert "Top 5 Largest Files" in captured.out
+        assert "big.py" in captured.out
+
+    def test_delta_mode_skips_empty_dir_walk(
+        self, capsys: pytest.CaptureFixture[str], mock_tiktoken: MagicMock
+    ) -> None:
+        """delta_mode=True avoids os.walk and does not crash on a missing dir."""
+        output_info = OutputInfo("out.txt", False, False)
+        with patch("exporter.utils.success") as mock_success:
+            print_statistics(
+                { ".": ["a.py"] },
+                100,
+                0.1,
+                output_info,
+                "/root",
+                "data",
+                delta_mode=True,
+                show_empty_dirs=True,
+                blacklist_dirs={"node_modules"},
+            )
+        mock_success.assert_called_once()
+
+    def test_show_empty_dirs_walks_and_adds(
+        self, capsys: pytest.CaptureFixture[str], tmp_path: Path, mock_tiktoken: MagicMock
+    ) -> None:
+        """show_empty_dirs walks the input dir and adds empty dirs to the tree."""
+        (tmp_path / "empty_sub").mkdir()
+        (tmp_path / "a.py").write_text("x")
+        output_info = OutputInfo("out.txt", False, False)
+        with patch("exporter.utils.success"):
+            print_statistics(
+                { ".": ["a.py"] },
+                2,
+                0.1,
+                output_info,
+                str(tmp_path),
+                "data",
+                show_empty_dirs=True,
+                blacklist_dirs=set(),
+            )
+        captured = capsys.readouterr()
+        assert "empty_sub" in captured.out

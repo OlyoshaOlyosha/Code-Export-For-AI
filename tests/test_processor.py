@@ -774,3 +774,68 @@ class TestExportProject:
             assert "tree" in result
             assert "# BEGIN FILE CONTENTS" not in result
             mock_gen.assert_called_once_with("/in", {"a.py"}, extra)
+
+
+# ---------------------------------------------------------------------------
+# Additional read_file_content edge cases
+# ---------------------------------------------------------------------------
+class TestReadFileContentEdge:
+    def test_latin1_fallback(self, tmp_path: Path) -> None:
+        """File unreadable as utf-8/cp1251 but valid latin-1 -> content returned."""
+        f = tmp_path / "latin1.txt"
+        # 0x98 is undefined in cp1251 but decodes under latin-1, forcing the fallback.
+        f.write_bytes(b"caf\x98")
+        result = read_file_content(str(f))
+        assert result is not None
+        assert "caf\x98" == result
+
+    def test_unreadable_returns_none(self, tmp_path: Path) -> None:
+        """OSError during read -> None and error logged."""
+        f = tmp_path / "unreadable.py"
+        f.write_text("data")
+        with (
+            patch.object(Path, "read_text", side_effect=OSError("permission")),
+            patch("exporter.processor.error") as mock_error,
+        ):
+            result = read_file_content(str(f))
+            assert result is None
+            mock_error.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# detect_language edge cases
+# ---------------------------------------------------------------------------
+class TestDetectLanguageEdge:
+    def test_known_extension(self) -> None:
+        assert detect_language("main.py") == "python"
+
+    def test_unknown_extension(self) -> None:
+        assert detect_language("data.xyz") == ""
+
+
+# ---------------------------------------------------------------------------
+# handle_clipboard_copy edge cases (copy disabled / over limit / under limit)
+# ---------------------------------------------------------------------------
+class TestClipboardCopyEdge:
+    def test_over_limit_skips_copy(self) -> None:
+        """Over limit + copy requested -> False, copy_to_clipboard never called."""
+        with (
+            patch("exporter.processor.copy_to_clipboard") as mock_copy,
+            patch("exporter.processor.warning") as mock_warn,
+        ):
+            result = handle_clipboard_copy(
+                "x" * 100, 100, copy_to_buffer=True, config={"max_clipboard_chars": 50}
+            )
+            assert result is False
+            mock_warn.assert_called_once()
+            mock_copy.assert_not_called()
+
+    def test_under_limit_proceeds(self) -> None:
+        """Under limit + copy requested -> copy_to_clipboard called, returns True."""
+        with (
+            patch("exporter.processor.copy_to_clipboard", return_value=True) as mock_copy,
+            patch("exporter.processor.success"),
+        ):
+            result = handle_clipboard_copy("hi", 2, copy_to_buffer=True, config={})
+            assert result is True
+            mock_copy.assert_called_once()

@@ -600,6 +600,7 @@ class TestPerformExport:
                 sample_config_dict,
                 create_file=True,
                 copy_to_buffer=False,
+                delta_since=None,
             )
             mock_stats.assert_called_once()
             # Check output_info passed
@@ -1004,3 +1005,68 @@ class TestMainIntegration:
 
             main()
             mock_export.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Additional main.py helper tests (argument parsing / config / input dir)
+# ---------------------------------------------------------------------------
+class TestMainArgHelpers:
+    def test_parse_arguments_config_and_output(self) -> None:
+        """--config and --output are parsed into the namespace."""
+        argv = ["main.py", "--config", "foo.py", "--output", "out.txt"]
+        with patch.object(sys, "argv", argv):
+            from main import parse_arguments
+
+            args = parse_arguments()
+        assert args.config == "foo.py"
+        assert args.output == "out.txt"
+
+    def test_select_config_file_valid_choice(self) -> None:
+        """Multiple configs + a valid numeric choice selects the matching path."""
+        from main import select_config_file
+
+        files = [Path("configs/a.py"), Path("configs/b.py")]
+        with (
+            patch("main.find_config_files", return_value=files),
+            patch("main.prompt", return_value="2"),
+            patch("main.info"),
+        ):
+            result = select_config_file(None)
+        assert result == files[1]
+
+    def test_select_config_file_invalid_then_valid(self) -> None:
+        """An invalid choice re-prompts before accepting a valid one."""
+        from main import select_config_file
+
+        files = [Path("configs/a.py"), Path("configs/b.py")]
+        with (
+            patch("main.find_config_files", return_value=files),
+            patch("main.prompt", side_effect=["x", "1"]),
+            patch("main.error") as mock_error,
+        ):
+            result = select_config_file(None)
+        assert result == files[0]
+        assert mock_error.call_count == 1
+
+    def test_select_config_file_no_configs_returns_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When no configs and no root config.py exist, returns None."""
+        monkeypatch.chdir(tmp_path)
+        with (
+            patch("main.find_config_files", return_value=[]),
+            patch("main.error") as mock_error,
+        ):
+            from main import select_config_file
+
+            result = select_config_file(None)
+        assert result is None
+        mock_error.assert_called()
+
+    def test_get_input_directory_falls_back_to_select(self, tmp_path: Path) -> None:
+        """No -d and no config preset -> falls back to select_directory."""
+        args = argparse.Namespace(directory=None)
+        selected = str(tmp_path / "chosen")
+        with patch("main.select_directory", return_value=selected):
+            from main import get_input_directory
+
+            result = get_input_directory(args, "")
+        assert result == selected
