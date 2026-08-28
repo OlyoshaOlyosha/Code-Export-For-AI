@@ -184,6 +184,33 @@ class TestIsCodeFile:
         cfg2 = _make_config(blacklist_extensions={"tar"})
         assert is_code_file("archive.tar.gz", cfg2) is True, "tar is not the last extension"
 
+    # ----- ALLOWED_DIRS override of directory blacklist -----
+    def test_blacklisted_dir_not_overridden_without_allowed_dirs(self) -> None:
+        """A file in a blacklisted dir is still rejected when no allowed_dirs given."""
+        cfg = _make_config(blacklist_dirs={"secret"})
+        assert is_code_file("secret/foo.py", cfg) is False, "secret/ should be blacklisted"
+
+    def test_blacklisted_dir_not_overridden_when_allowed_dirs_empty(self) -> None:
+        """Empty/None allowed_dirs never triggers the override (back-compat)."""
+        cfg = _make_config(blacklist_dirs={"secret"})
+        assert is_code_file("secret/foo.py", cfg, allowed_dirs=set(), root_dir=".") is False
+        assert is_code_file("secret/foo.py", cfg, allowed_dirs=None, root_dir=".") is False
+        assert is_code_file("secret/foo.py", cfg, allowed_dirs={"secret"}, root_dir=None) is False
+
+    def test_blacklisted_dir_overridden_by_allowed_dir(self) -> None:
+        """A file in an allowed (but blacklisted) dir is exported via the override."""
+        cfg = _make_config(blacklist_dirs={"secret"})
+        assert is_code_file("secret/foo.py", cfg, allowed_dirs={"secret"}, root_dir=".") is True, (
+            "secret/ should be allowed when whitelisted"
+        )
+
+    def test_blacklisted_dir_overridden_by_allowed_ancestor(self) -> None:
+        """An allowed ancestor also overrides the deeper blacklisted dir."""
+        cfg = _make_config(blacklist_dirs={"secret"})
+        assert is_code_file("top/secret/foo.py", cfg, allowed_dirs={"top"}, root_dir=".") is True, (
+            "top/secret/ allowed via ancestor 'top'"
+        )
+
 
 class TestIsInAllowedDirs:
     def test_empty_allowed_dirs_is_unrestricted(self) -> None:

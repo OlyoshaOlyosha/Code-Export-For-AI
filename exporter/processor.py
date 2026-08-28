@@ -670,7 +670,7 @@ def _collect_files(
                 if gitignore_spec is not None and gitignore_spec.match_file(rel_path):
                     continue
 
-                if not is_code_file(str(file_path), config):
+                if not is_code_file(str(file_path), config, allowed_dirs=allowed_dirs, root_dir=str(input_path)):
                     stats.skipped_rules += 1
                     continue
 

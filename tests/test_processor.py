@@ -585,9 +585,9 @@ class TestCollectFilesAllowedDirs:
     def test_explicitly_allowed_hidden_dir_is_kept(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """A hidden dir in ALLOWED_DIRS is kept and its files exported.
 
-        Note: a dir that is both blacklisted (in blacklist_dirs) and allowed is kept
-        for traversal, but its files are still rejected by is_code_file's parent-dir
-        blacklist check, so we test with a hidden dir here.
+        A dir that is both blacklisted (in blacklist_dirs) and allowed is now kept and
+        its files exported too (see test_blacklisted_dir_overridden_by_allowed_dir); we
+        keep this hidden-dir case to prove the whitelist also bypasses hidden pruning.
         """
         config = _allowed_config(sample_config_dict, {".secret"})
         root = tmp_path / "proj"
@@ -597,6 +597,27 @@ class TestCollectFilesAllowedDirs:
         (root / "normal.py").write_text("y")  # outside whitelist — excluded
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
         assert processed == {".secret/hidden.py"}, f"Got {processed}"
+
+    def test_blacklisted_dir_overridden_by_allowed_dir(
+        self, sample_config_dict: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """A dir present in both BLACKLIST_DIRS and ALLOWED_DIRS is exported.
+
+        The directory is kept during traversal (allowed bypasses pruning) and, thanks
+        to the override in is_code_file, its files pass the parent-dir blacklist check.
+        Files in directories outside the allowlist are still excluded (scoped override).
+        """
+        config = _allowed_config(sample_config_dict, {"secret"})
+        config["blacklist_dirs"] = {"secret"}  # re-add the blacklist the helper cleared
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "secret").mkdir()
+        (root / "secret" / "leak.py").write_text("x")  # inside blacklisted+allowed dir
+        (root / "src").mkdir()
+        (root / "src" / "main.py").write_text("y")  # outside allowlist -> excluded
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert processed == {"secret/leak.py"}, f"Only secret/ should be exported, got {processed}"
+        assert stats is not None, "stats should not be None"
 
 
 class TestStructureWithAllowedDirs:

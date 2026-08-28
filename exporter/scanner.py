@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Any
 
 
-def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
+def is_code_file(
+    file_path: str,
+    config: dict[str, Any],
+    allowed_dirs: set[str] | None = None,
+    root_dir: str | None = None,
+) -> bool:
     """Determine if a file should be included in the export based on filters.
 
     Args:
@@ -12,6 +17,11 @@ def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
         config: Configuration dictionary containing the keys:
             'blacklist_extensions', 'blacklist_dirs', 'blacklist_filenames',
             'filename_filter_mode', and optionally 'max_size'.
+        allowed_dirs: Optional whitelist of allowed relative directory paths. When a
+            file lives inside an allowed (but blacklisted) directory, the directory
+            blacklist is overridden so the file is still exported.
+        root_dir: Project root, used to compute the file's relative directory for the
+            allowed_dirs lookup. Required for the override to take effect.
 
     Returns:
         True if the file should be included, False otherwise.
@@ -32,8 +42,15 @@ def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
     ):
         return False
 
-    # Skip if parent directory is blacklisted
-    if path.parent.name in config["blacklist_dirs"]:
+    # Override: a file inside an explicitly allowed dir bypasses the dir blacklist.
+    allowed = (
+        bool(allowed_dirs)
+        and root_dir is not None
+        and is_in_allowed_dirs(Path(file_path).relative_to(Path(root_dir)).parent.as_posix(), allowed_dirs)
+    )
+
+    # Skip if parent directory is blacklisted (unless it is an allowed dir)
+    if path.parent.name in config["blacklist_dirs"] and not allowed:
         return False
 
     # Skip files without extension or with blacklisted extension
