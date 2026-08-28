@@ -522,6 +522,99 @@ class TestCollectFiles:
 
 
 # ---------------------------------------------------------------------------
+# ALLOWED_DIRS whitelist
+# ---------------------------------------------------------------------------
+def _allowed_config(base: dict[str, Any], allowed_dirs: set[str]) -> dict[str, Any]:
+    """Build a config that permits .py files and applies the given allowed_dirs."""
+    config = base.copy()
+    config["blacklist_extensions"] = set()
+    config["blacklist_dirs"] = set()
+    config["blacklist_filenames"] = set()
+    config["allowed_extensionless_files"] = set()
+    config["max_depth"] = -1
+    config["allowed_dirs"] = allowed_dirs
+    return config
+
+
+class TestCollectFilesAllowedDirs:
+    def test_empty_allowed_dirs_no_restriction(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Empty ALLOWED_DIRS means no restriction — all .py files exported."""
+        config = _allowed_config(sample_config_dict, set())
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "main.py").write_text("main")
+        (root / "src").mkdir()
+        (root / "src" / "util.py").write_text("util")
+        (root / "tests").mkdir()
+        (root / "tests" / "test_main.py").write_text("test")
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert processed == {"main.py", "src/util.py", "tests/test_main.py"}, f"Got {processed}"
+
+    def test_excludes_files_outside_allowed_dirs(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Non-empty ALLOWED_DIRS excludes files outside it (root + other dirs)."""
+        config = _allowed_config(sample_config_dict, {"src"})
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "main.py").write_text("main")  # root — excluded
+        (root / "src").mkdir()
+        (root / "src" / "util.py").write_text("util")  # inside — kept
+        (root / "src" / "extra.py").write_text("extra")  # inside — kept
+        (root / "tests").mkdir()
+        (root / "tests" / "test_main.py").write_text("test")  # outside — excluded
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert processed == {"src/util.py", "src/extra.py"}, f"Got {processed}"
+        # Root file is skipped by the whitelist at the file level (tests/ branch is
+        # pruned at the directory level, so it is not counted here).
+        assert stats.skipped_rules >= 1, f"Expected >=1 skipped by whitelist, got {stats.skipped_rules}"
+
+    def test_nested_allowed_dir_includes_deep_files(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """Nested whitelist 'tests/unit' includes deep descendants only."""
+        config = _allowed_config(sample_config_dict, {"tests/unit"})
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "tests").mkdir()
+        (root / "tests" / "unit").mkdir()
+        (root / "tests" / "unit" / "deep").mkdir()
+        (root / "tests" / "unit" / "a.py").write_text("a")
+        (root / "tests" / "unit" / "deep" / "b.py").write_text("b")
+        (root / "tests" / "other").mkdir()
+        (root / "tests" / "other" / "c.py").write_text("c")  # outside — excluded
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert processed == {"tests/unit/a.py", "tests/unit/deep/b.py"}, f"Got {processed}"
+
+    def test_explicitly_allowed_hidden_dir_is_kept(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """A hidden dir in ALLOWED_DIRS is kept and its files exported.
+
+        Note: a dir that is both blacklisted (in blacklist_dirs) and allowed is kept
+        for traversal, but its files are still rejected by is_code_file's parent-dir
+        blacklist check, so we test with a hidden dir here.
+        """
+        config = _allowed_config(sample_config_dict, {".secret"})
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".secret").mkdir()
+        (root / ".secret" / "hidden.py").write_text("x")
+        (root / "normal.py").write_text("y")  # outside whitelist — excluded
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert processed == {".secret/hidden.py"}, f"Got {processed}"
+
+
+class TestStructureWithAllowedDirs:
+    def test_allowed_hidden_dir_shown_in_tree(self, tmp_path: Path) -> None:
+        """An allowed (but normally hidden) dir appears in the structure tree."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".secret").mkdir()
+        (root / ".secret" / "main.py").write_text("x")
+        (root / "src").mkdir()
+        (root / "src" / "app.py").write_text("y")
+        config = {"blacklist_dirs": set(), "allowed_dirs": {".secret"}}
+        result = _generate_structure_with_empty_dirs(str(root), {".secret/main.py"}, config)
+        assert ".secret/" in result, f".secret should be in tree:\n{result}"
+        assert "src/" not in result, f"non-allowed src should be absent:\n{result}"
+
+
+# ---------------------------------------------------------------------------
 # _build_output
 # ---------------------------------------------------------------------------
 class TestBuildOutput:

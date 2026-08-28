@@ -362,13 +362,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
         "MAX_DEPTH": int,
         "USE_GITIGNORE": bool,
         "ALLOWED_EXTENSIONLESS_FILES": set,
+        "ALLOWED_DIRS": set,
     }
 
     config_dict = {}
     for attr, expected_type in required_attrs.items():
         if not hasattr(module, attr):
             # Provide defaults for optional settings (backward compatibility)
-            if attr in ("USE_GITIGNORE", "ALLOWED_EXTENSIONLESS_FILES"):
+            if attr in ("USE_GITIGNORE", "ALLOWED_EXTENSIONLESS_FILES", "ALLOWED_DIRS"):
                 default = False if attr == "USE_GITIGNORE" else set()
                 config_dict[attr.lower()] = default
                 continue

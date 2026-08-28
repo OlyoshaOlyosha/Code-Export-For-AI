@@ -62,6 +62,13 @@ BLACKLIST_DIRS = {
     "logs",
 }
 
+# Whitelist of allowed directories (relative paths from project root).
+# When non-empty, ONLY files inside these directories are exported.
+# Example: use {"src", "tests/unit"} to export only those two directories.
+# Empty set = no restriction. To stop .gitignore from excluding files
+# inside allowed dirs, set USE_GITIGNORE = False.
+ALLOWED_DIRS = set()
+
 # To exclude minified/bundled files (e.g., app.min.js, vendor.bundle.js),
 # add them here and set FILENAME_FILTER_MODE = "contains".
 # Example: BLACKLIST_FILENAMES = {"min.", "bundle.", "chunk."}

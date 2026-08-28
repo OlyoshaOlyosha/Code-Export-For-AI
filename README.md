@@ -166,6 +166,7 @@ Key options (inside a `.py` config file):
 | `BLACKLIST_EXTENSIONS` | large set (see template) | File extensions to ignore (without dot). |
 | `ALLOWED_EXTENSIONLESS_FILES` | `{"Dockerfile", "Makefile", "README", "LICENSE"}` | Extensionless files that should be included. |
 | `BLACKLIST_DIRS` | `{"__pycache__", ".git", ".vscode", "node_modules", …}` | Directories to skip (by name). |
+| `ALLOWED_DIRS` | `set()` (empty) | Whitelist of directories to **include** (relative paths from the project root, forward slashes). When non‑empty, **only** files inside these directories are exported; every other path – including the project root – is skipped. Example: `{"src", "tests/unit"}`. Nested entries include all descendants (so `"tests/unit"` also exports `tests/unit/deep/x.py`). To stop `.gitignore` from excluding files inside allowed dirs, set `USE_GITIGNORE = False`. |
 | `BLACKLIST_FILENAMES` | `{"setup.py", "requirements.txt"}` | Specific filenames to ignore. |
 | `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
 | `USE_GITIGNORE` | `True` (in template) | Respect `.gitignore` rules in addition to blacklists. **Note:** if the key is missing from a config file, it defaults to `False`. The provided template sets it to `True`. |
@@ -190,6 +191,7 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 
 ## Advanced Usage & Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal.
+- Restrict an export to a subset of folders with `ALLOWED_DIRS = {"src", "tests/unit"}`; everything else is excluded. This is independent of `BLACKLIST_DIRS`/`.gitignore`, but set `USE_GITIGNORE = False` if you do not want `.gitignore` to drop files inside allowed folders.
 - Clipboard on Linux: install `pyperclip` or ensure `xclip`/`xsel` are present.
 - Export **only the project structure** (no file contents) by setting `EXPORT_CONTENT = False`.
 - If the output is too big for the clipboard, raise `MAX_CLIPBOARD_CHARS` or set it to `0`.

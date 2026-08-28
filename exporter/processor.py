@@ -16,7 +16,7 @@ from rich.progress import BarColumn, Progress, TextColumn
 
 from exporter.clipboard import copy_to_clipboard
 from exporter.console import error, success, warning
-from exporter.scanner import is_code_file
+from exporter.scanner import is_code_file, is_in_allowed_dirs
 from exporter.utils import ExportStats
 
 # Default mapping from file extension to language tag for code fences
@@ -170,6 +170,74 @@ def _load_gitignore_spec(root_dir: Path) -> PathSpec | None:
     return spec
 
 
+def _dir_allowed(cand_rel: str, allowed_dirs: set[str]) -> bool:
+    """Check whether a candidate relative directory is within the allowed whitelist.
+
+    Args:
+        cand_rel: Relative directory path (forward slashes, e.g. "tests/unit").
+        allowed_dirs: Set of allowed relative directory paths. An empty set means
+            no restriction (always returns True).
+
+    Returns:
+        True if the candidate equals an allowed dir, is a descendant of one, or is
+        an ancestor of one (so a partially-typed ancestor still reveals branches).
+
+    """
+    if not allowed_dirs:
+        return True
+    for a in allowed_dirs:
+        a_norm = a.rstrip("/")
+        if cand_rel == a_norm or cand_rel.startswith(a_norm + "/") or a_norm.startswith(cand_rel + "/"):
+            return True
+    return False
+
+
+def _prune_dirs(
+    dirs: list[str],
+    root: str,
+    *,
+    input_dir: Path | str,
+    blacklist_dirs: set[str],
+    allowed_dirs: set[str],
+    gitignore_spec: PathSpec | None,
+) -> list[str]:
+    """Filter directory names by hidden/blacklist/gitignore rules and the allowed-dirs whitelist.
+
+    When ``allowed_dirs`` is non-empty, only whitelisted branches are kept (allowed dirs
+    bypass the hidden/blacklist pruning). Otherwise the standard hidden/blacklist/gitignore
+    rules apply.
+
+    Args:
+        dirs: Directory names in the current ``os.walk`` step.
+        root: Absolute/relative root path of the current ``os.walk`` step.
+        input_dir: Project root path (used to compute relative paths for gitignore).
+        blacklist_dirs: Set of blacklisted directory names.
+        allowed_dirs: Set of allowed relative directory paths.
+        gitignore_spec: Compiled .gitignore patterns, or None to skip.
+
+    Returns:
+        The filtered list of directory names.
+
+    """
+    base = Path(input_dir)
+    rel_root = Path(root).relative_to(base).as_posix()
+    pruned: list[str] = []
+    for d in dirs:
+        cand = f"{rel_root}/{d}" if rel_root != "." else d
+        if allowed_dirs:
+            if _dir_allowed(cand, allowed_dirs):
+                pruned.append(d)
+        else:
+            if d.startswith(".") or d in blacklist_dirs:
+                continue
+            if gitignore_spec is not None and gitignore_spec.match_file(
+                f"{(Path(root) / d).relative_to(base).as_posix()}/"
+            ):
+                continue
+            pruned.append(d)
+    return pruned
+
+
 def read_file_content(file_path: str) -> str | None:
     """Read file content with fallback encodings.
 
@@ -221,23 +289,25 @@ def _generate_structure_with_empty_dirs(
     """
     root_path = Path(input_dir)
     blacklist_dirs = config["blacklist_dirs"]
+    allowed_dirs = config.get("allowed_dirs", set())
 
     # Build directory tree by walking filesystem with filtering
     dir_tree = {}  # root node representing contents of input_dir
 
     for root, dirs, _ in os.walk(input_dir):
-        # Filter out hidden and blacklisted directories
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in blacklist_dirs]
-
-        # Apply .gitignore filtering to directories (trailing slash required)
-        if gitignore_spec is not None:
-            dirs[:] = [
-                d
-                for d in dirs
-                if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_dir).as_posix()}/")
-            ]
-
         rel_root = Path(root).relative_to(input_dir).as_posix()
+
+        # Filter directories by hidden/blacklist/gitignore rules and the
+        # allowed-dirs whitelist (allowed dirs bypass hidden/blacklist pruning).
+        dirs[:] = _prune_dirs(
+            dirs,
+            root,
+            input_dir=input_dir,
+            blacklist_dirs=blacklist_dirs,
+            allowed_dirs=allowed_dirs,
+            gitignore_spec=gitignore_spec,
+        )
+
         if rel_root == ".":
             # Insert first‑level directories into the tree so they show even when empty
             for d in dirs:
@@ -548,6 +618,7 @@ def _collect_files(
     max_depth = config.get("max_depth", -1)  # -1 = unlimited, 0 = only root, >0 = limited
     input_path = Path(input_dir)
     max_size = config.get("max_size")  # may be 0 meaning "no limit"
+    allowed_dirs = config.get("allowed_dirs", set())
 
     # ── Progress bar while collecting files ────────────────────────────
     with Progress(
@@ -564,16 +635,16 @@ def _collect_files(
             rel_root = Path(root).relative_to(input_dir).as_posix()
             depth = 0 if rel_root == "." else len(Path(rel_root).parts)
 
-            # Filter out blacklisted and hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in config["blacklist_dirs"]]
-
-            # Apply .gitignore filtering to directories (PathSpec requires trailing slash)
-            if gitignore_spec is not None:
-                dirs[:] = [
-                    d
-                    for d in dirs
-                    if not gitignore_spec.match_file(f"{(Path(root) / d).relative_to(input_path).as_posix()}/")
-                ]
+            # Filter directories by hidden/blacklist/gitignore rules and the
+            # allowed-dirs whitelist (allowed dirs bypass hidden/blacklist pruning).
+            dirs[:] = _prune_dirs(
+                dirs,
+                root,
+                input_dir=input_path,
+                blacklist_dirs=config["blacklist_dirs"],
+                allowed_dirs=allowed_dirs,
+                gitignore_spec=gitignore_spec,
+            )
 
             # Apply depth limit (-1 means unlimited)
             if max_depth != -1:
@@ -588,6 +659,12 @@ def _collect_files(
             for filename in files:
                 file_path = Path(root) / filename
                 rel_path = file_path.relative_to(input_path).as_posix()
+
+                # Skip files outside the allowed-dirs whitelist (if any)
+                rel_dir = Path(rel_path).parent.as_posix()
+                if not is_in_allowed_dirs(rel_dir, allowed_dirs):
+                    stats.skipped_rules += 1
+                    continue
 
                 # Apply .gitignore filtering to files
                 if gitignore_spec is not None and gitignore_spec.match_file(rel_path):

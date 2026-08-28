@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from exporter.scanner import is_code_file
+from exporter.scanner import is_code_file, is_in_allowed_dirs
 
 
 # ---------------------------------------------------------------------------
@@ -183,3 +183,39 @@ class TestIsCodeFile:
         # Not blacklisted
         cfg2 = _make_config(blacklist_extensions={"tar"})
         assert is_code_file("archive.tar.gz", cfg2) is True, "tar is not the last extension"
+
+
+class TestIsInAllowedDirs:
+    def test_empty_allowed_dirs_is_unrestricted(self) -> None:
+        """Empty whitelist never restricts."""
+        assert is_in_allowed_dirs(".", set()) is True
+        assert is_in_allowed_dirs("src", set()) is True
+        assert is_in_allowed_dirs("src/deep", set()) is True
+
+    def test_root_excluded_when_whitelist_nonempty(self) -> None:
+        """Project root ('.') is not in a non-empty whitelist."""
+        assert is_in_allowed_dirs(".", {"src"}) is False
+        assert is_in_allowed_dirs("", {"src"}) is False
+
+    def test_direct_match(self) -> None:
+        """Exact whitelist entry matches its own directory."""
+        assert is_in_allowed_dirs("src", {"src"}) is True
+        assert is_in_allowed_dirs("src", {"src", "tests"}) is True
+
+    def test_ancestor_match_includes_descendants(self) -> None:
+        """A whitelisted ancestor includes nested directories."""
+        assert is_in_allowed_dirs("tests/unit", {"tests"}) is True
+        assert is_in_allowed_dirs("tests/unit/deep", {"tests"}) is True
+        assert is_in_allowed_dirs("tests/unit/deep/x", {"tests"}) is True
+
+    def test_nested_whitelist_includes_deep_files(self) -> None:
+        """A nested whitelist entry includes deep descendants only."""
+        assert is_in_allowed_dirs("tests/unit", {"tests/unit"}) is True
+        assert is_in_allowed_dirs("tests/unit/deep", {"tests/unit"}) is True
+        assert is_in_allowed_dirs("tests/other", {"tests/unit"}) is False
+        assert is_in_allowed_dirs("tests", {"tests/unit"}) is False
+
+    def test_trailing_slash_normalized_by_caller(self) -> None:
+        """Whitelist entries use forward slashes without trailing slashes."""
+        assert is_in_allowed_dirs("src", {"src/"}) is False  # not normalized here; caller strips
+

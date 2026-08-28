@@ -79,6 +79,7 @@ def sample_config_dict() -> dict[str, Any]:
         "max_depth": -1,
         "use_gitignore": False,
         "allowed_extensionless_files": {"Dockerfile", "Makefile", "README", "LICENSE"},
+        "allowed_dirs": set(),
     }
 
 

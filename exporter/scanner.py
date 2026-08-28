@@ -60,3 +60,23 @@ def is_code_file(file_path: str, config: dict[str, Any]) -> bool:
             warning(f"Skipping inaccessible file: {file_path} ({e})")
             return False
     return True
+
+
+def is_in_allowed_dirs(rel_dir: str, allowed_dirs: set[str]) -> bool:
+    """Check whether a relative directory path falls within the allowed whitelist.
+
+    Args:
+        rel_dir: Relative directory path (use "." for the project root, and use
+            forward slashes as path separators, e.g. "tests/unit").
+        allowed_dirs: Set of allowed relative directory paths. An empty set means
+            no restriction (always returns True).
+
+    Returns:
+        True if the directory (or one of its ancestors) is in the whitelist,
+        or if the whitelist is empty.
+
+    """
+    if not allowed_dirs:
+        return True
+    parts = [] if rel_dir in (".", "") else rel_dir.split("/")
+    return any("/".join(parts[:i]) in allowed_dirs for i in range(1, len(parts) + 1))
