@@ -14,6 +14,33 @@ from rich.tree import Tree
 
 from exporter.console import console, error, info, success, warning
 
+# Cache for the tiktoken encoding so we don't re-download the encoding file on
+# every call (the interactive re-export loop calls print_statistics repeatedly).
+# None = not yet attempted; an Encoding object = ok; False = offline fallback.
+_enc_cache = None
+_warned_offline = False
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count, falling back to ~4 chars/token when offline.
+
+    tiktoken.get_encoding downloads its encoding file on first use and raises on
+    network/SSL errors. We cache the encoder and, on any failure, switch to a
+    cheap heuristic so the export run never crashes while offline.
+    """
+    global _enc_cache, _warned_offline
+    if _enc_cache is None:
+        try:
+            _enc_cache = tiktoken.get_encoding("o200k_base")
+        except Exception:
+            _enc_cache = False
+            if not _warned_offline:
+                _warned_offline = True
+                warning("Offline: token count estimated at ~4 chars/token (tiktoken encoding unavailable).")
+    if _enc_cache is False:
+        return max(1, len(text) // 4)
+    return len(_enc_cache.encode(text))
+
 
 def select_directory() -> str | None:
     """Prompt for a project directory via GUI or console fallback.
@@ -143,8 +170,7 @@ def print_statistics(
     num_files = sum(len(files) for files in files_by_dir.values())
     root_name = Path(input_dir).name
 
-    enc = tiktoken.get_encoding("o200k_base")
-    token_count = len(enc.encode(full_output))
+    token_count = _estimate_tokens(full_output)
 
     if total_chars >= 1024 * 1024:
         size_str = f"{total_chars / (1024 * 1024):.2f} MB"

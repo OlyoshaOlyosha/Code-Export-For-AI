@@ -4,10 +4,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import tiktoken
 
 from exporter.utils import (
     ExportStats,
     OutputInfo,
+    _estimate_tokens,
     get_next_filename,
     print_statistics,
     select_directory,
@@ -273,7 +275,7 @@ class TestPrintStatisticsExtended:
         output_info = OutputInfo("out.txt", False, False)
         stats = ExportStats(skipped_binary=2, skipped_size=3, skipped_rules=1)
         with patch("exporter.utils.success"):
-            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+            print_statistics({".": ["a.py"]}, 100, 0.1, output_info, "/root", "data", stats=stats)
         captured = capsys.readouterr()
         assert "Binary / unreadable: 2" in captured.out
         assert "Exceeded size limit: 3" in captured.out
@@ -286,7 +288,7 @@ class TestPrintStatisticsExtended:
         output_info = OutputInfo("out.txt", False, False)
         stats = ExportStats(extension_counts={"py": 4, "js": 1})
         with patch("exporter.utils.success"):
-            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+            print_statistics({".": ["a.py"]}, 100, 0.1, output_info, "/root", "data", stats=stats)
         captured = capsys.readouterr()
         assert "Top Extensions" in captured.out
         assert "py" in captured.out
@@ -296,7 +298,7 @@ class TestPrintStatisticsExtended:
         output_info = OutputInfo("out.txt", False, False)
         stats = ExportStats(largest_files=[(1024, "big.py"), (10, "small.py")])
         with patch("exporter.utils.success"):
-            print_statistics({ ".": ["a.py"] }, 100, 0.1, output_info, "/root", "data", stats=stats)
+            print_statistics({".": ["a.py"]}, 100, 0.1, output_info, "/root", "data", stats=stats)
         captured = capsys.readouterr()
         assert "Top 5 Largest Files" in captured.out
         assert "big.py" in captured.out
@@ -308,7 +310,7 @@ class TestPrintStatisticsExtended:
         output_info = OutputInfo("out.txt", False, False)
         with patch("exporter.utils.success") as mock_success:
             print_statistics(
-                { ".": ["a.py"] },
+                {".": ["a.py"]},
                 100,
                 0.1,
                 output_info,
@@ -329,7 +331,7 @@ class TestPrintStatisticsExtended:
         output_info = OutputInfo("out.txt", False, False)
         with patch("exporter.utils.success"):
             print_statistics(
-                { ".": ["a.py"] },
+                {".": ["a.py"]},
                 2,
                 0.1,
                 output_info,
@@ -340,3 +342,89 @@ class TestPrintStatisticsExtended:
             )
         captured = capsys.readouterr()
         assert "empty_sub" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _estimate_tokens — offline resilience
+# ---------------------------------------------------------------------------
+class TestEstimateTokens:
+    def test_offline_returns_positive_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When get_encoding raises, fall back to ~4 chars/token (>=1)."""
+        monkeypatch.setattr("exporter.utils._enc_cache", None)
+        monkeypatch.setattr("exporter.utils._warned_offline", False)
+
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr(tiktoken, "get_encoding", boom)
+        warnings: list[str] = []
+        monkeypatch.setattr("exporter.utils.warning", lambda m: warnings.append(m))
+
+        assert _estimate_tokens("hello world this is a test") >= 1
+        assert warnings, "offline should warn exactly once"
+        # Second call must not warn again and must stay positive.
+        assert _estimate_tokens("x") >= 1
+        assert len(warnings) == 1
+
+    def test_offline_empty_text_still_positive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty output must not produce a zero/negative token count."""
+        monkeypatch.setattr("exporter.utils._enc_cache", None)
+        monkeypatch.setattr("exporter.utils._warned_offline", False)
+
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr(tiktoken, "get_encoding", boom)
+        monkeypatch.setattr("exporter.utils.warning", lambda m: None)
+        assert _estimate_tokens("") == 1
+
+    def test_online_returns_real_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When the encoder is available, return its real token count."""
+        monkeypatch.setattr("exporter.utils._enc_cache", None)
+        monkeypatch.setattr("exporter.utils._warned_offline", False)
+        fake = MagicMock()
+        fake.encode.side_effect = lambda s: list(s)  # 1 token per character
+        monkeypatch.setattr(tiktoken, "get_encoding", lambda *a, **k: fake)
+        monkeypatch.setattr("exporter.utils.warning", lambda m: None)
+        assert _estimate_tokens("abc") == 3
+
+
+# ---------------------------------------------------------------------------
+# print_statistics — token logic offline/online
+# ---------------------------------------------------------------------------
+class TestPrintStatisticsTokens:
+    def test_offline_does_not_crash_and_warns(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Offline: print_statistics runs, prints a token line, warns once."""
+        monkeypatch.setattr("exporter.utils._enc_cache", None)
+        monkeypatch.setattr("exporter.utils._warned_offline", False)
+
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("offline")
+
+        monkeypatch.setattr(tiktoken, "get_encoding", boom)
+        warnings: list[str] = []
+        monkeypatch.setattr("exporter.utils.warning", lambda m: warnings.append(m))
+
+        output_info = OutputInfo("out.txt", False, False)
+        print_statistics({".": ["a.py"]}, 100, 0.1, output_info, "/root", "hello world this is content")
+
+        captured = capsys.readouterr()
+        assert "Tokens:" in captured.out
+        assert warnings, "offline path should warn once"
+
+    def test_online_uses_real_count(self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+        """Online: token count comes from the encoder (3 chars -> 3 tokens)."""
+        monkeypatch.setattr("exporter.utils._enc_cache", None)
+        monkeypatch.setattr("exporter.utils._warned_offline", False)
+        fake = MagicMock()
+        fake.encode.side_effect = lambda s: list(s)
+        monkeypatch.setattr(tiktoken, "get_encoding", lambda *a, **k: fake)
+        monkeypatch.setattr("exporter.utils.warning", lambda m: None)
+
+        output_info = OutputInfo("out.txt", False, False)
+        print_statistics({".": ["a.py"]}, 100, 0.1, output_info, "/root", "abc")
+
+        captured = capsys.readouterr()
+        assert "3" in captured.out
