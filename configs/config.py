@@ -10,18 +10,55 @@ CONFIG_DESCRIPTION = "Default configuration – all file types, balanced filters
 
 # File extensions to ignore (without dot)
 BLACKLIST_EXTENSIONS = {
-    "txt", "md", "markdown", "log", "pdf", "doc", "docx", "xls", "xlsx",
-    "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp",
-    "mp3", "mp4", "avi", "mov", "wav",
-    "zip", "rar", "7z", "tar", "gz",
-    "exe", "dll", "so", "bin", "o", "obj",
-    "pyc", "pyo", "pyd", "class",
-    "db", "sqlite", "mdb",
-    "ini", "cfg", "conf", "config", "env",
+    "txt",
+    "md",
+    "markdown",
+    "log",
+    "pdf",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "bmp",
+    "ico",
+    "svg",
+    "webp",
+    "mp3",
+    "mp4",
+    "avi",
+    "mov",
+    "wav",
+    "zip",
+    "rar",
+    "7z",
+    "tar",
+    "gz",
+    "exe",
+    "dll",
+    "so",
+    "bin",
+    "o",
+    "obj",
+    "pyc",
+    "pyo",
+    "pyd",
+    "class",
+    "db",
+    "sqlite",
+    "mdb",
+    "ini",
+    "cfg",
+    "conf",
+    "config",
+    "env",
     # Build artifacts and generated files
-    "pyi",            # Type stub files
-    "lock",           # Dependency lock files (poetry.lock, package-lock.json)
-    "map",            # Source maps
+    "pyi",  # Type stub files
+    "lock",  # Dependency lock files (poetry.lock, package-lock.json)
+    "map",  # Source maps
 }
 
 # Extensionless files whitelist

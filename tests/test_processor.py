@@ -823,9 +823,7 @@ class TestClipboardCopyEdge:
             patch("exporter.processor.copy_to_clipboard") as mock_copy,
             patch("exporter.processor.warning") as mock_warn,
         ):
-            result = handle_clipboard_copy(
-                "x" * 100, 100, copy_to_buffer=True, config={"max_clipboard_chars": 50}
-            )
+            result = handle_clipboard_copy("x" * 100, 100, copy_to_buffer=True, config={"max_clipboard_chars": 50})
             assert result is False
             mock_warn.assert_called_once()
             mock_copy.assert_not_called()

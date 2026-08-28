@@ -9,14 +9,16 @@ from rich.theme import Theme
 # --------------------------------------------------------------------------- #
 
 # Style theme – all output functions map messages to these named styles.
-_theme = Theme({
-    "info": "",
-    "warning": "yellow",
-    "error": "red",
-    "success": "green",
-    "header": "bold cyan",
-    "prompt": "bright_blue",
-})
+_theme = Theme(
+    {
+        "info": "",
+        "warning": "yellow",
+        "error": "red",
+        "success": "green",
+        "header": "bold cyan",
+        "prompt": "bright_blue",
+    }
+)
 
 console = Console(theme=_theme)
 

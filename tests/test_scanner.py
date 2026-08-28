@@ -218,4 +218,3 @@ class TestIsInAllowedDirs:
     def test_trailing_slash_normalized_by_caller(self) -> None:
         """Whitelist entries use forward slashes without trailing slashes."""
         assert is_in_allowed_dirs("src", {"src/"}) is False  # not normalized here; caller strips
-
