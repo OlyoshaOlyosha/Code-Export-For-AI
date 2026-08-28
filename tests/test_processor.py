@@ -117,19 +117,33 @@ class TestGenerateStructureWithEmptyDirs:
         ]
         assert result == "\n".join(expected_lines), f"Got:\n{result}"
 
-    def test_dir_filter_out_hidden_and_blacklisted(self, tmp_path: Path) -> None:
-        """Hidden and blacklisted dirs are skipped."""
+    def test_dir_filter_blacklisted_dotdir_excluded(self, tmp_path: Path) -> None:
+        """A dot-directory is excluded only because it is in BLACKLIST_DIRS (no prefix rule)."""
         root = tmp_path / "app"
         root.mkdir()
         (root / "src").mkdir()
-        (root / ".hidden").mkdir()
+        (root / ".cache").mkdir()  # dot-dir, but blacklisted
         (root / "node_modules").mkdir()
         (root / "src" / "file.py").write_text("x")
         processed = {"src/file.py"}
-        config = {"blacklist_dirs": {"node_modules"}}
+        config = {"blacklist_dirs": {".cache", "node_modules"}}
         result = _generate_structure_with_empty_dirs(str(root), processed, config)
-        assert ".hidden" not in result
+        assert ".cache" not in result
         assert "node_modules" not in result
+        assert "src/" in result
+
+    def test_dir_filter_nonblacklisted_dotdir_included(self, tmp_path: Path) -> None:
+        """A dot-directory NOT in BLACKLIST_DIRS is traversed and shown in the tree."""
+        root = tmp_path / "app"
+        root.mkdir()
+        (root / "src").mkdir()
+        (root / ".opencode").mkdir()  # dot-dir, not blacklisted
+        (root / ".opencode" / "skill.md").write_text("x")
+        (root / "src" / "file.py").write_text("x")
+        processed = {"src/file.py", ".opencode/skill.md"}
+        config = {"blacklist_dirs": set()}
+        result = _generate_structure_with_empty_dirs(str(root), processed, config)
+        assert ".opencode/" in result
         assert "src/" in result
 
     def test_gitignore_spec_applied_to_dirs(self, tmp_path: Path) -> None:
@@ -324,6 +338,47 @@ class TestCollectFiles:
             assert "src/main.py" in processed, f"Expected 'src/main.py' in processed, got {processed}"
             assert all("venv" not in p for p in processed), "venv files should be excluded"
             assert stats is not None, "stats should not be None"
+
+    def test_collects_nonblacklisted_dotdir(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """A dot-directory not in BLACKLIST_DIRS (e.g. .opencode) is traversed and collected."""
+        config = sample_config_dict.copy()
+        config["blacklist_dirs"] = set()
+        config["blacklist_extensions"] = set()
+        config["blacklist_filenames"] = set()
+        config["use_gitignore"] = False
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".opencode").mkdir()
+        (root / ".opencode" / "main.py").write_text("print('hi')")
+        (root / ".opencode" / "hidden.py").write_text("x")  # file name not dot-prefixed
+        (root / "src").mkdir()
+        (root / "src" / "app.py").write_text("code")
+        with patch("exporter.processor.is_code_file", return_value=True):
+            files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert ".opencode/main.py" in processed, f"Expected .opencode/main.py in {processed}"
+        assert ".opencode/hidden.py" in processed, f"Expected .opencode/hidden.py in {processed}"
+        assert "src/app.py" in processed, f"Expected src/app.py in {processed}"
+
+    def test_excludes_blacklisted_dotdir(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
+        """A dot-directory in BLACKLIST_DIRS (e.g. .venv, .git) is excluded."""
+        config = sample_config_dict.copy()
+        config["blacklist_dirs"] = {".venv", ".git"}
+        config["blacklist_extensions"] = set()
+        config["blacklist_filenames"] = set()
+        config["use_gitignore"] = False
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".venv").mkdir()
+        (root / ".venv" / "lib.py").write_text("data")
+        (root / ".git").mkdir()
+        (root / ".git" / "config").write_text("x")
+        (root / "src").mkdir()
+        (root / "src" / "app.py").write_text("code")
+        with patch("exporter.processor.is_code_file", return_value=True):
+            files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
+        assert all(".venv" not in p for p in processed), f".venv should be excluded: {processed}"
+        assert all(".git" not in p for p in processed), f".git should be excluded: {processed}"
+        assert "src/app.py" in processed, f"Expected src/app.py in {processed}"
 
     def test_max_depth_limit(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
         """max_depth=1 includes files at depth 1, stops deeper recursion."""

@@ -145,7 +145,7 @@ flowchart TD
     I --> J[Write to file and/or clipboard]
 ```
 
-1. **Scanning** – the directory is walked recursively, skipping blacklisted/hidden directories and applying `.gitignore` (if enabled). Depth limit is enforced during traversal.
+1. **Scanning** – the directory is walked recursively, skipping directories listed in `BLACKLIST_DIRS` and applying `.gitignore` (if enabled). Hidden directories (those starting with `.`) are **no longer** auto‑skipped — their exclusion is governed solely by `BLACKLIST_DIRS` and `.gitignore`. Depth limit is enforced during traversal.
 2. **Filtering** – files are checked against extension/name blacklists, size limits, and the extensionless‑whitelist. A progress bar tracks the work.
 3. **Sorting** – if `PRIORITY_PATTERNS` are defined, files are reordered according to the priority tiers; within each tier they’re sorted by directory depth and alphabetically.
 4. **Content reading** – each remaining file is read with automatic encoding detection (UTF‑8, CP1251, Latin‑1). Binary/unreadable files are skipped.
@@ -165,7 +165,7 @@ Key options (inside a `.py` config file):
 |---------|---------|-------------|
 | `BLACKLIST_EXTENSIONS` | large set (see template) | File extensions to ignore (without dot). |
 | `ALLOWED_EXTENSIONLESS_FILES` | `{"Dockerfile", "Makefile", "README", "LICENSE"}` | Extensionless files that should be included. |
-| `BLACKLIST_DIRS` | `{"__pycache__", ".git", ".vscode", "node_modules", …}` | Directories to skip (by name). |
+| `BLACKLIST_DIRS` | `{"__pycache__", ".git", ".vscode", "node_modules", ".venv", ".cache", ".tox", ".next", …}` | Directories to skip (by name). Hidden directories (starting with `.`) are **not** auto‑skipped anymore — they are excluded only if listed here or matched by `.gitignore`. The default set already includes common hidden/cache folders so they stay excluded when `USE_GITIGNORE = False`. |
 | `ALLOWED_DIRS` | `set()` (empty) | Whitelist of directories to **include** (relative paths from the project root, forward slashes). When non‑empty, **only** files inside these directories are exported; every other path – including the project root – is skipped. Example: `{"src", "tests/unit"}`. Nested entries include all descendants (so `"tests/unit"` also exports `tests/unit/deep/x.py`). To stop `.gitignore` from excluding files inside allowed dirs, set `USE_GITIGNORE = False`. |
 | `BLACKLIST_FILENAMES` | `{"setup.py", "requirements.txt"}` | Specific filenames to ignore. |
 | `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
@@ -192,6 +192,12 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 ## Advanced Usage & Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal.
 - Restrict an export to a subset of folders with `ALLOWED_DIRS = {"src", "tests/unit"}`; everything else is excluded. This is independent of `BLACKLIST_DIRS`/`.gitignore`, but set `USE_GITIGNORE = False` if you do not want `.gitignore` to drop files inside allowed folders.
+- Hidden directories are controlled by `BLACKLIST_DIRS` / `.gitignore`, not by a hard‑coded prefix skip. For example, with `USE_GITIGNORE = False` and `.opencode` **not** in `BLACKLIST_DIRS`, its files are captured normally:
+  ```python
+  USE_GITIGNORE = False
+  BLACKLIST_DIRS = {"__pycache__", ".git", ".venv", ".cache", "node_modules", …}  # no ".opencode"
+  ```
+  Set `USE_GITIGNORE = True` (the default) and add `.opencode/` to your `.gitignore`, or add `.opencode` to `BLACKLIST_DIRS`, if you want it excluded. Note that hidden **files** (e.g. `.env`) are still always skipped by the file filter.
 - Clipboard on Linux: install `pyperclip` or ensure `xclip`/`xsel` are present.
 - Export **only the project structure** (no file contents) by setting `EXPORT_CONTENT = False`.
 - If the output is too big for the clipboard, raise `MAX_CLIPBOARD_CHARS` or set it to `0`.

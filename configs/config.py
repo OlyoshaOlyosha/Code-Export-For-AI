@@ -97,6 +97,20 @@ BLACKLIST_DIRS = {
     "tmp",
     "temp",
     "logs",
+    # Hidden/cache directories that previously were auto-skipped by the
+    # dot-prefix rule. Kept here so they stay excluded when USE_GITIGNORE is False.
+    ".venv",
+    ".cache",
+    ".tox",
+    ".next",
+    ".parcel-cache",
+    ".svelte-kit",
+    ".astro",
+    ".gradle",
+    ".turbo",
+    ".nuxt",
+    ".output",
+    "site-packages",
 }
 
 # Whitelist of allowed directories (relative paths from project root).

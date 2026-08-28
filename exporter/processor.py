@@ -201,11 +201,12 @@ def _prune_dirs(
     allowed_dirs: set[str],
     gitignore_spec: PathSpec | None,
 ) -> list[str]:
-    """Filter directory names by hidden/blacklist/gitignore rules and the allowed-dirs whitelist.
+    """Filter directory names by blacklist/gitignore rules and the allowed-dirs whitelist.
 
-    When ``allowed_dirs`` is non-empty, only whitelisted branches are kept (allowed dirs
-    bypass the hidden/blacklist pruning). Otherwise the standard hidden/blacklist/gitignore
-    rules apply.
+    Hidden directories (those starting with ``.``) are no longer auto-skipped here; their
+    exclusion is governed solely by ``blacklist_dirs`` and ``.gitignore``. When
+    ``allowed_dirs`` is non-empty, only whitelisted branches are kept (allowed dirs bypass
+    the blacklist pruning). Otherwise the standard blacklist/gitignore rules apply.
 
     Args:
         dirs: Directory names in the current ``os.walk`` step.
@@ -228,7 +229,7 @@ def _prune_dirs(
             if _dir_allowed(cand, allowed_dirs):
                 pruned.append(d)
         else:
-            if d.startswith(".") or d in blacklist_dirs:
+            if d in blacklist_dirs:
                 continue
             if gitignore_spec is not None and gitignore_spec.match_file(
                 f"{(Path(root) / d).relative_to(base).as_posix()}/"
@@ -272,8 +273,9 @@ def _generate_structure_with_empty_dirs(
 ) -> str:
     """Generate project tree including all directories (even empty) from actual filesystem.
 
-    Directories are filtered according to blacklist_dirs, hidden directories (starting with '.'),
-    and optionally .gitignore rules (via gitignore_spec).
+    Directories are filtered according to blacklist_dirs (hidden directories are no longer
+    auto-skipped — their exclusion is governed by blacklist_dirs / .gitignore) and optionally
+    .gitignore rules (via gitignore_spec).
 
     Only exported files (from processed_paths) are shown as leaves.
 
@@ -297,8 +299,8 @@ def _generate_structure_with_empty_dirs(
     for root, dirs, _ in os.walk(input_dir):
         rel_root = Path(root).relative_to(input_dir).as_posix()
 
-        # Filter directories by hidden/blacklist/gitignore rules and the
-        # allowed-dirs whitelist (allowed dirs bypass hidden/blacklist pruning).
+        # Filter directories by blacklist/gitignore rules and the allowed-dirs
+        # whitelist (allowed dirs bypass the blacklist pruning).
         dirs[:] = _prune_dirs(
             dirs,
             root,
@@ -635,8 +637,8 @@ def _collect_files(
             rel_root = Path(root).relative_to(input_dir).as_posix()
             depth = 0 if rel_root == "." else len(Path(rel_root).parts)
 
-            # Filter directories by hidden/blacklist/gitignore rules and the
-            # allowed-dirs whitelist (allowed dirs bypass hidden/blacklist pruning).
+            # Filter directories by blacklist/gitignore rules and the allowed-dirs
+            # whitelist (allowed dirs bypass the blacklist pruning).
             dirs[:] = _prune_dirs(
                 dirs,
                 root,
