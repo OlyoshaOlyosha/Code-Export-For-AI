@@ -192,12 +192,7 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 ## Advanced Usage & Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal.
 - Restrict an export to a subset of folders with `ALLOWED_DIRS = {"src", "tests/unit"}`; everything else is excluded. This is independent of `BLACKLIST_DIRS`/`.gitignore`, but set `USE_GITIGNORE = False` if you do not want `.gitignore` to drop files inside allowed folders.
-- Hidden directories are controlled by `BLACKLIST_DIRS` / `.gitignore`, not by a hard‑coded prefix skip. For example, with `USE_GITIGNORE = False` and `.opencode` **not** in `BLACKLIST_DIRS`, its files are captured normally:
-  ```python
-  USE_GITIGNORE = False
-  BLACKLIST_DIRS = {"__pycache__", ".git", ".venv", ".cache", "node_modules", …}  # no ".opencode"
-  ```
-  Set `USE_GITIGNORE = True` (the default) and add `.opencode/` to your `.gitignore`, or add `.opencode` to `BLACKLIST_DIRS`, if you want it excluded. Note that hidden **files** (e.g. `.env`) are still always skipped by the file filter.
+- Hidden directories are controlled by `BLACKLIST_DIRS` / `.gitignore`, not by a hard‑coded prefix skip. Hidden **files** (e.g. `.env`) are still always skipped by the file filter.
 - Clipboard on Linux: install `pyperclip` or ensure `xclip`/`xsel` are present.
 - Export **only the project structure** (no file contents) by setting `EXPORT_CONTENT = False`.
 - If the output is too big for the clipboard, raise `MAX_CLIPBOARD_CHARS` or set it to `0`.
