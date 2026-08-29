@@ -113,11 +113,14 @@ BLACKLIST_DIRS = {
     "site-packages",
 }
 
-# Whitelist of allowed directories (relative paths from project root).
-# When non-empty, ONLY files inside these directories are exported.
-# Example: use {"src", "tests/unit"} to export only those two directories.
-# Empty set = no restriction. To stop .gitignore from excluding files
-# inside allowed dirs, set USE_GITIGNORE = False.
+# Force-include list of allowed directories (relative paths from project root).
+# Listed dirs (and all ancestors/descendants) bypass BLACKLIST_DIRS and
+# .gitignore, so their files are always exported. All other dirs keep normal
+# filtering — they are NOT restricted. Example: use {"src", "tests/unit"} to
+# force-include those two directories (and everything inside them) while every
+# other directory is still filtered by BLACKLIST_DIRS / .gitignore as usual.
+# Empty set = no restriction. Hidden dirs remain governed by BLACKLIST_DIRS /
+# .gitignore unless explicitly listed here.
 ALLOWED_DIRS = set()
 
 # To exclude minified/bundled files (e.g., app.min.js, vendor.bundle.js),

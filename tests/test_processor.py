@@ -605,25 +605,34 @@ class TestCollectFilesAllowedDirs:
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
         assert processed == {"main.py", "src/util.py", "tests/test_main.py"}, f"Got {processed}"
 
-    def test_excludes_files_outside_allowed_dirs(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
-        """Non-empty ALLOWED_DIRS excludes files outside it (root + other dirs)."""
+    def test_files_outside_allowed_dirs_still_collected(
+        self, sample_config_dict: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """ALLOWED_DIRS is a force-include exception, not a hard whitelist.
+
+        Files OUTSIDE the allowed dirs but passing normal filters (root + other
+        dirs) are still collected. Only files inside allowed dirs bypass
+        blacklist/gitignore, while everything else keeps normal filtering.
+        """
         config = _allowed_config(sample_config_dict, {"src"})
         root = tmp_path / "proj"
         root.mkdir()
-        (root / "main.py").write_text("main")  # root — excluded
+        (root / "main.py").write_text("main")  # root — kept (normal filtering)
         (root / "src").mkdir()
-        (root / "src" / "util.py").write_text("util")  # inside — kept
-        (root / "src" / "extra.py").write_text("extra")  # inside — kept
+        (root / "src" / "util.py").write_text("util")  # inside — kept (force-include)
+        (root / "src" / "extra.py").write_text("extra")  # inside — kept (force-include)
         (root / "tests").mkdir()
-        (root / "tests" / "test_main.py").write_text("test")  # outside — excluded
+        (root / "tests" / "test_main.py").write_text("test")  # outside — kept (normal filtering)
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
-        assert processed == {"src/util.py", "src/extra.py"}, f"Got {processed}"
-        # Root file is skipped by the whitelist at the file level (tests/ branch is
-        # pruned at the directory level, so it is not counted here).
-        assert stats.skipped_rules >= 1, f"Expected >=1 skipped by whitelist, got {stats.skipped_rules}"
+        assert processed == {
+            "main.py",
+            "src/util.py",
+            "src/extra.py",
+            "tests/test_main.py",
+        }, f"Got {processed}"
 
     def test_nested_allowed_dir_includes_deep_files(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
-        """Nested whitelist 'tests/unit' includes deep descendants only."""
+        """Nested force-include 'tests/unit' keeps deep descendants (and normal dirs)."""
         config = _allowed_config(sample_config_dict, {"tests/unit"})
         root = tmp_path / "proj"
         root.mkdir()
@@ -633,25 +642,29 @@ class TestCollectFilesAllowedDirs:
         (root / "tests" / "unit" / "a.py").write_text("a")
         (root / "tests" / "unit" / "deep" / "b.py").write_text("b")
         (root / "tests" / "other").mkdir()
-        (root / "tests" / "other" / "c.py").write_text("c")  # outside — excluded
+        # tests/other is outside allowed_dirs but passes normal filters -> still collected.
+        (root / "tests" / "other" / "c.py").write_text("c")
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
-        assert processed == {"tests/unit/a.py", "tests/unit/deep/b.py"}, f"Got {processed}"
+        assert processed == {
+            "tests/unit/a.py",
+            "tests/unit/deep/b.py",
+            "tests/other/c.py",
+        }, f"Got {processed}"
 
     def test_explicitly_allowed_hidden_dir_is_kept(self, sample_config_dict: dict[str, Any], tmp_path: Path) -> None:
-        """A hidden dir in ALLOWED_DIRS is kept and its files exported.
+        """A hidden dir in ALLOWED_DIRS is force-included (bypasses hidden pruning).
 
-        A dir that is both blacklisted (in blacklist_dirs) and allowed is now kept and
-        its files exported too (see test_blacklisted_dir_overridden_by_allowed_dir); we
-        keep this hidden-dir case to prove the whitelist also bypasses hidden pruning.
+        Files outside the allowed dir but passing normal filters are still collected —
+        ALLOWED_DIRS does not restrict them.
         """
         config = _allowed_config(sample_config_dict, {".secret"})
         root = tmp_path / "proj"
         root.mkdir()
         (root / ".secret").mkdir()
         (root / ".secret" / "hidden.py").write_text("x")
-        (root / "normal.py").write_text("y")  # outside whitelist — excluded
+        (root / "normal.py").write_text("y")  # outside allowed — kept (normal filtering)
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
-        assert processed == {".secret/hidden.py"}, f"Got {processed}"
+        assert processed == {".secret/hidden.py", "normal.py"}, f"Got {processed}"
 
     def test_blacklisted_dir_overridden_by_allowed_dir(
         self, sample_config_dict: dict[str, Any], tmp_path: Path
@@ -660,24 +673,58 @@ class TestCollectFilesAllowedDirs:
 
         The directory is kept during traversal (allowed bypasses pruning) and, thanks
         to the override in is_code_file, its files pass the parent-dir blacklist check.
-        Files in directories outside the allowlist are still excluded (scoped override).
+        Files in a blacklisted dir NOT in allowed_dirs are still excluded; files in
+        other (non-blacklisted) dirs are collected via normal filtering.
         """
         config = _allowed_config(sample_config_dict, {"secret"})
-        config["blacklist_dirs"] = {"secret"}  # re-add the blacklist the helper cleared
+        config["blacklist_dirs"] = {"secret", "blocked"}  # re-add the blacklist the helper cleared
         root = tmp_path / "proj"
         root.mkdir()
         (root / "secret").mkdir()
-        (root / "secret" / "leak.py").write_text("x")  # inside blacklisted+allowed dir
+        (root / "secret" / "leak.py").write_text("x")  # inside blacklisted+allowed dir -> kept
         (root / "src").mkdir()
-        (root / "src" / "main.py").write_text("y")  # outside allowlist -> excluded
+        (root / "src" / "main.py").write_text("y")  # normal dir, not blacklisted -> kept
+        (root / "blocked").mkdir()
+        (root / "blocked" / "nope.py").write_text("z")  # blacklisted, not allowed -> excluded
         files_by_dir, _, processed, _, stats = _collect_files(str(root), config)
-        assert processed == {"secret/leak.py"}, f"Only secret/ should be exported, got {processed}"
+        assert processed == {
+            "secret/leak.py",
+            "src/main.py",
+        }, f"secret/ and src/ should be exported, got {processed}"
         assert stats is not None, "stats should not be None"
+
+    def test_gitignored_file_in_allowed_dir_force_included(
+        self, sample_config_dict: dict[str, Any], tmp_path: Path
+    ) -> None:
+        """A gitignored file inside an allowed dir is force-included (USE_GITIGNORE).
+
+        Both the directory pruning and the file-level .gitignore check are bypassed
+        for dirs listed in ALLOWED_DIRS, while gitignored files elsewhere stay excluded.
+        """
+        config = _allowed_config(sample_config_dict, {"secret"})
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".gitignore").write_text("secret/\nignored.log\n")
+        (root / "secret").mkdir()
+        (root / "secret" / "data.txt").write_text("x")  # gitignored dir, but allowed -> kept
+        (root / "logs").mkdir()
+        (root / "logs" / "ignored.log").write_text("y")  # gitignored, not allowed -> excluded
+        (root / "main.py").write_text("z")  # not gitignored -> kept
+        gitignore_spec = _load_gitignore_spec(Path(root))
+        files_by_dir, _, processed, _, stats = _collect_files(str(root), config, gitignore_spec=gitignore_spec)
+        assert processed == {
+            "secret/data.txt",
+            "main.py",
+        }, f"Got {processed}"
 
 
 class TestStructureWithAllowedDirs:
     def test_allowed_hidden_dir_shown_in_tree(self, tmp_path: Path) -> None:
-        """An allowed (but normally hidden) dir appears in the structure tree."""
+        """An allowed (but normally hidden) dir appears in the structure tree.
+
+        ALLOWED_DIRS is a force-include list, not a whitelist: the allowed hidden dir
+        is force-included, while other (non-blacklisted) dirs like src/ are shown too.
+        """
         root = tmp_path / "proj"
         root.mkdir()
         (root / ".secret").mkdir()
@@ -685,9 +732,9 @@ class TestStructureWithAllowedDirs:
         (root / "src").mkdir()
         (root / "src" / "app.py").write_text("y")
         config = {"blacklist_dirs": set(), "allowed_dirs": {".secret"}}
-        result = _generate_structure_with_empty_dirs(str(root), {".secret/main.py"}, config)
+        result = _generate_structure_with_empty_dirs(str(root), {".secret/main.py", "src/app.py"}, config)
         assert ".secret/" in result, f".secret should be in tree:\n{result}"
-        assert "src/" not in result, f"non-allowed src should be absent:\n{result}"
+        assert "src/" in result, f"non-allowed src should still appear (normal filtering):\n{result}"
 
 
 # ---------------------------------------------------------------------------

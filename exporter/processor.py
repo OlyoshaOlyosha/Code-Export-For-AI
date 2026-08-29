@@ -201,12 +201,13 @@ def _prune_dirs(
     allowed_dirs: set[str],
     gitignore_spec: PathSpec | None,
 ) -> list[str]:
-    """Filter directory names by blacklist/gitignore rules and the allowed-dirs whitelist.
+    """Filter directory names by blacklist/gitignore rules with force-include exceptions.
 
-    Hidden directories (those starting with ``.``) are no longer auto-skipped here; their
-    exclusion is governed solely by ``blacklist_dirs`` and ``.gitignore``. When
-    ``allowed_dirs`` is non-empty, only whitelisted branches are kept (allowed dirs bypass
-    the blacklist pruning). Otherwise the standard blacklist/gitignore rules apply.
+    Hidden directories (those starting with ``.``) are not auto-skipped here; their
+    exclusion is governed solely by ``blacklist_dirs`` and ``.gitignore``. When a dir is
+    listed in ``allowed_dirs`` it is force-included, bypassing both the blacklist and
+    gitignore pruning. All other dirs are still filtered normally — they are NOT
+    restricted to the allowed set. With an empty ``allowed_dirs`` behavior is unchanged.
 
     Args:
         dirs: Directory names in the current ``os.walk`` step.
@@ -225,17 +226,19 @@ def _prune_dirs(
     pruned: list[str] = []
     for d in dirs:
         cand = f"{rel_root}/{d}" if rel_root != "." else d
-        if allowed_dirs:
-            if _dir_allowed(cand, allowed_dirs):
-                pruned.append(d)
-        else:
-            if d in blacklist_dirs:
-                continue
-            if gitignore_spec is not None and gitignore_spec.match_file(
-                f"{(Path(root) / d).relative_to(base).as_posix()}/"
-            ):
-                continue
+        # Force-include allowed dirs: bypass blacklist/gitignore pruning. The
+        # empty-set guard is required because _dir_allowed returns True on an
+        # empty set, which would otherwise let everything slip past the filters.
+        if allowed_dirs and _dir_allowed(cand, allowed_dirs):
             pruned.append(d)
+            continue
+        if d in blacklist_dirs:
+            continue
+        if gitignore_spec is not None and gitignore_spec.match_file(
+            f"{(Path(root) / d).relative_to(base).as_posix()}/"
+        ):
+            continue
+        pruned.append(d)
     return pruned
 
 
@@ -637,8 +640,8 @@ def _collect_files(
             rel_root = Path(root).relative_to(input_dir).as_posix()
             depth = 0 if rel_root == "." else len(Path(rel_root).parts)
 
-            # Filter directories by blacklist/gitignore rules and the allowed-dirs
-            # whitelist (allowed dirs bypass the blacklist pruning).
+            # Filter directories by blacklist/gitignore rules with allowed-dirs
+            # force-include exceptions (allowed dirs bypass blacklist/gitignore).
             dirs[:] = _prune_dirs(
                 dirs,
                 root,
@@ -662,14 +665,14 @@ def _collect_files(
                 file_path = Path(root) / filename
                 rel_path = file_path.relative_to(input_path).as_posix()
 
-                # Skip files outside the allowed-dirs whitelist (if any)
+                # Force-include files inside allowed dirs (bypass .gitignore). The
+                # bool(allowed_dirs) guard matters: is_in_allowed_dirs returns True on
+                # an empty set, which would otherwise force-include everything.
                 rel_dir = Path(rel_path).parent.as_posix()
-                if not is_in_allowed_dirs(rel_dir, allowed_dirs):
-                    stats.skipped_rules += 1
-                    continue
+                in_allowed = bool(allowed_dirs) and is_in_allowed_dirs(rel_dir, allowed_dirs)
 
-                # Apply .gitignore filtering to files
-                if gitignore_spec is not None and gitignore_spec.match_file(rel_path):
+                # Apply .gitignore filtering to files (unless force-included)
+                if gitignore_spec is not None and gitignore_spec.match_file(rel_path) and not in_allowed:
                     continue
 
                 if not is_code_file(str(file_path), config, allowed_dirs=allowed_dirs, root_dir=str(input_path)):

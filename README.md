@@ -166,7 +166,7 @@ Key options (inside a `.py` config file):
 | `BLACKLIST_EXTENSIONS` | large set (see template) | File extensions to ignore (without dot). |
 | `ALLOWED_EXTENSIONLESS_FILES` | `{"Dockerfile", "Makefile", "README", "LICENSE"}` | Extensionless files that should be included. |
 | `BLACKLIST_DIRS` | `{"__pycache__", ".git", ".vscode", "node_modules", ".venv", ".cache", ".tox", ".next", …}` | Directories to skip (by name). Hidden directories (starting with `.`) are **not** auto‑skipped anymore — they are excluded only if listed here or matched by `.gitignore`. The default set already includes common hidden/cache folders so they stay excluded when `USE_GITIGNORE = False`. |
-| `ALLOWED_DIRS` | `set()` (empty) | Whitelist of directories to **include** (relative paths from the project root, forward slashes). When non‑empty, **only** files inside these directories are exported; every other path – including the project root – is skipped. Example: `{"src", "tests/unit"}`. Nested entries include all descendants (so `"tests/unit"` also exports `tests/unit/deep/x.py`). To stop `.gitignore` from excluding files inside allowed dirs, set `USE_GITIGNORE = False`. |
+| `ALLOWED_DIRS` | `set()` (empty) | Force‑include list of directories (relative paths from the project root, forward slashes). Listed dirs — and all their ancestors/descendants — **bypass** `BLACKLIST_DIRS` and `.gitignore`, so their files are always exported. All other dirs keep normal filtering; they are **not** restricted. Example: `{"src", "tests/unit"}`. Nested entries include all descendants (`"tests/unit"` also exports `tests/unit/deep/x.py`). Hidden dirs are still governed by `BLACKLIST_DIRS`/`.gitignore` unless explicitly listed here. |
 | `BLACKLIST_FILENAMES` | `{"setup.py", "requirements.txt"}` | Specific filenames to ignore. |
 | `FILENAME_FILTER_MODE` | `"exact"` | Matching mode for `BLACKLIST_FILENAMES`: `"exact"` or `"contains"`. |
 | `USE_GITIGNORE` | `True` (in template) | Respect `.gitignore` rules in addition to blacklists. **Note:** if the key is missing from a config file, it defaults to `False`. The provided template sets it to `True`. |
@@ -191,7 +191,7 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 
 ## Advanced Usage & Tips
 - For large repositories, increase `MAX_FILE_SIZE_MB` (up to `0` for unlimited) or use `MAX_DEPTH` to limit traversal.
-- Restrict an export to a subset of folders with `ALLOWED_DIRS = {"src", "tests/unit"}`; everything else is excluded. This is independent of `BLACKLIST_DIRS`/`.gitignore`, but set `USE_GITIGNORE = False` if you do not want `.gitignore` to drop files inside allowed folders.
+- Force‑include folders with `ALLOWED_DIRS = {"src", "tests/unit"}`: files inside these dirs bypass `BLACKLIST_DIRS` and `.gitignore`, but every other folder is still filtered normally (nothing else is excluded). This is an exception list, not a hard restriction.
 - Hidden directories are controlled by `BLACKLIST_DIRS` / `.gitignore`, not by a hard‑coded prefix skip. Hidden **files** (e.g. `.env`) are still always skipped by the file filter.
 - Clipboard on Linux: install `pyperclip` or ensure `xclip`/`xsel` are present.
 - Export **only the project structure** (no file contents) by setting `EXPORT_CONTENT = False`.
