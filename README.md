@@ -1,5 +1,6 @@
 # Project2Prompt
 
+[![CI](https://github.com/OlyoshaOlyosha/Project2Prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/OlyoshaOlyosha/Project2Prompt/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![Version](https://img.shields.io/github/v/release/OlyoshaOlyosha/Project2Prompt?label=Version&color=orange)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen.svg)
