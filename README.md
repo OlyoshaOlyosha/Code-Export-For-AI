@@ -255,4 +255,4 @@ After an export the tool prompts:
 This loop lets you iterate quickly, send partial updates, or experiment with different configurations without restarting the tool.
 
 ## Contributing
-Improvements are welcome – open an issue or submit a pull request.
+Improvements are welcome – open an issue or submit a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and the PR checklist.
