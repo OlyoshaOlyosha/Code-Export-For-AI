@@ -1,6 +1,7 @@
 """Unit tests for main.py module."""
 
 import argparse
+import io
 import sys
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,26 @@ ALLOWED_EXTENSIONLESS_FILES = {"Dockerfile"}
         with pytest.raises(SystemExit) as exc_info:
             load_config(config_file)
         assert exc_info.value.code == 1
+
+    def test_error_path_skips_pause_without_tty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-TTY stdin (pytest/CI/pipes): wrong-typed setting exits(1) at once, without pausing (issue #5)."""
+        config_file = tmp_path / "config.py"
+        config_file.write_text('BLACKLIST_EXTENSIONS = {"txt"}\nOUTPUT_DIR = 123\n')
+
+        from main import load_config
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO())  # isatty() -> False
+        with (
+            patch("builtins.input") as mock_in,
+            patch("main.error") as mock_error,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            load_config(config_file)
+
+        assert exc_info.value.code == 1
+        mock_in.assert_not_called()
+        assert mock_error.call_count == 1
+        assert "OUTPUT_DIR has wrong type" in mock_error.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------

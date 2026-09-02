@@ -6,7 +6,9 @@ This module provides the entry point for exporting code projects to a single fil
 
 import argparse
 import ast
+import contextlib
 import importlib.util
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,17 @@ from exporter.console import error, header, info, prompt, warning
 from exporter.processor import export_project
 from exporter.updater import check_for_updates
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
+
+
+def _pause_before_exit() -> None:
+    """Wait for Enter before exiting, but only in an interactive terminal (issue #5).
+
+    Skipped when stdin is missing or not a TTY (pytest, CI, piped runs); any
+    stdin error is treated as non-interactive as well.
+    """
+    with contextlib.suppress(Exception):
+        if sys.stdin is not None and sys.stdin.isatty():
+            input("\nPress Enter to exit...")
 
 
 def load_app_config() -> dict[str, bool]:
@@ -349,14 +362,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         error(f"ERROR: Configuration file not found: {config_path}")
         info("Please ensure the configuration file exists.")
-        input("\nPress Enter to exit...")
+        _pause_before_exit()
         raise SystemExit(1)
 
     # Dynamically import the module
     spec = importlib.util.spec_from_file_location("user_config", config_path)
     if spec is None or spec.loader is None:
         error(f"ERROR: Could not load configuration from {config_path}")
-        input("\nPress Enter to exit...")
+        _pause_before_exit()
         raise SystemExit(1)
 
     module = importlib.util.module_from_spec(spec)
@@ -365,11 +378,11 @@ def load_config(config_path: Path) -> dict[str, Any]:
     except SyntaxError as e:
         error(f"ERROR: Syntax error in configuration file: {e}")
         info("Tip: check for missing quotes or a backslash at the end of a raw string.")
-        input("\nPress Enter to exit...")
+        _pause_before_exit()
         raise SystemExit(1)
     except Exception as e:
         error(f"ERROR: Failed to execute configuration file: {e}")
-        input("\nPress Enter to exit...")
+        _pause_before_exit()
         raise SystemExit(1)
 
     required_attrs = {
@@ -402,7 +415,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
         value = getattr(module, attr)
         if not isinstance(value, expected_type):
             error(f"ERROR: Configuration setting {attr} has wrong type (expected {expected_type})")
-            input("\nPress Enter to exit...")
+            _pause_before_exit()
             raise SystemExit(1)
         if attr == "MAX_DEPTH" and value < -1:
             error(
@@ -508,7 +521,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("-o", "--output", help="Output file name")
     parser.add_argument("-d", "--directory", help="Path to the project directory")
     parser.add_argument(
-        "-c", "--config", help="Name of the configuration file (e.g., 'python.py') from the 'configs/' folder"
+        "-c", "--config", help="Name of the configuration file (e.g., 'config.py') from the 'configs/' folder"
     )
     return parser.parse_args()
 
@@ -662,7 +675,7 @@ def main() -> None:
         # 1. Choose configuration file
         config_path = select_config_file(args.config)
         if config_path is None:
-            input("\nPress Enter to exit...")
+            _pause_before_exit()
             return
 
         # Capture the ordered list of configs (for later switching by number).
@@ -693,12 +706,12 @@ def main() -> None:
         # ── First export ───────────────────────────────────────────────────
         config_dict = _prepare_config(config_path)
         if not config_dict:
-            input("\nPress Enter to exit...")
+            _pause_before_exit()
             return
 
         input_dir = get_input_directory(args, config_dict.get("input_dir", ""))
         if not input_dir:
-            input("\nPress Enter to exit...")
+            _pause_before_exit()
             return
 
         output_file = get_output_filename(args, config_dict, create_file=config_dict["create_file"])

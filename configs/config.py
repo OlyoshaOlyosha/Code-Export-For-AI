@@ -147,7 +147,7 @@ OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in O
 # Max file size to include (in MB). Set to 0 to disable the limit.
 MAX_FILE_SIZE_MB = 5
 CREATE_FILE = True  # Write output to file
-COPY_TO_CLIPBOARD = True  # Copy output to clipboard
+COPY_TO_CLIPBOARD = False  # Copy output to clipboard (opt-in; set True to enable)
 
 # Export options
 EXPORT_STRUCTURE = True  # Include project directory tree in output
