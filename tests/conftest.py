@@ -86,7 +86,7 @@ def sample_config_dict() -> dict[str, Any]:
 @pytest.fixture
 def mock_clipboard() -> MagicMock:
     """Mock clipboard.copy_to_clipboard to return True."""
-    with patch("exporter.processor.copy_to_clipboard") as mock_copy:
+    with patch("exporter.builder.copy_to_clipboard") as mock_copy:
         mock_copy.return_value = True
         yield mock_copy
 
@@ -141,7 +141,7 @@ def mock_tkinter() -> dict[str, MagicMock]:
 @pytest.fixture
 def mock_pathspec() -> MagicMock:
     """Mock pathspec.PathSpec to ignore all files by default."""
-    with patch("exporter.processor.PathSpec") as mock_class:
+    with patch("exporter.collector.PathSpec") as mock_class:
         mock_spec = MagicMock()
         mock_spec.match_file.return_value = False
         mock_class.from_lines.return_value = mock_spec

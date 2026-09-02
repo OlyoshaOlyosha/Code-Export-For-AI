@@ -5,15 +5,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from exporter.processor import (
+from exporter.builder import (
     _build_output,
     _generate_structure_with_empty_dirs,
     build_full_output,
-    detect_language,
-    export_project,
     handle_clipboard_copy,
-    read_file_content,
 )
+from exporter.processor import export_project
+from exporter.reader import detect_language, read_file_content
 
 
 # ---------------------------------------------------------------------------
@@ -36,15 +35,15 @@ class TestExportProject:
         mock_stats = MagicMock()
         with (
             patch(
-                "exporter.processor._collect_files",
+                "exporter.collector._collect_files",
                 return_value=(files_by_dir, all_content, processed_paths, extra_dirs, mock_stats),
             ),
-            patch("exporter.processor._build_output", return_value=full_output),
+            patch("exporter.builder._build_output", return_value=full_output),
             patch("pathlib.Path.mkdir"),
             patch.object(Path, "write_text", side_effect=OSError("disk full")),
             patch("exporter.processor.error") as mock_error,
             patch("exporter.processor.warning") as mock_warning,
-            patch("exporter.processor.handle_clipboard_copy"),
+            patch("exporter.builder.handle_clipboard_copy"),
         ):
             export_project(input_dir, output_file, config, create_file=True, copy_to_buffer=False)
             mock_error.assert_called_once()
@@ -59,9 +58,9 @@ class TestExportProject:
         root.mkdir()
         with (
             patch("exporter.processor.warning") as mock_warn,
-            patch("exporter.processor._collect_files", return_value=({}, [], set(), set(), MagicMock())),
-            patch("exporter.processor._build_output", return_value=""),
-            patch("exporter.processor.handle_clipboard_copy"),
+            patch("exporter.collector._collect_files", return_value=({}, [], set(), set(), MagicMock())),
+            patch("exporter.builder._build_output", return_value=""),
+            patch("exporter.builder.handle_clipboard_copy"),
         ):
             export_project(str(root), "out.txt", config, create_file=False, copy_to_buffer=False)
             mock_warn.assert_called_once()
@@ -105,7 +104,7 @@ class TestExportProject:
             "export_content": False,
         }
         extra = set()
-        with patch("exporter.processor._generate_structure_with_depth", return_value="tree\n") as mock_gen:
+        with patch("exporter.builder._generate_structure_with_depth", return_value="tree\n") as mock_gen:
             result = _build_output("/in", {"a.py"}, [], extra, config)
             assert "tree" in result
             assert "# BEGIN FILE CONTENTS" not in result
@@ -141,8 +140,8 @@ class TestClipboardCopyEdge:
     def test_over_limit_skips_copy(self) -> None:
         """Over limit + copy requested -> False, copy_to_clipboard never called."""
         with (
-            patch("exporter.processor.copy_to_clipboard") as mock_copy,
-            patch("exporter.processor.warning") as mock_warn,
+            patch("exporter.builder.copy_to_clipboard") as mock_copy,
+            patch("exporter.builder.warning") as mock_warn,
         ):
             result = handle_clipboard_copy("x" * 100, 100, copy_to_buffer=True, config={"max_clipboard_chars": 50})
             assert result is False
