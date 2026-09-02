@@ -8,6 +8,7 @@ import argparse
 import ast
 import contextlib
 import importlib.util
+import re
 import sys
 import time
 from pathlib import Path
@@ -595,6 +596,10 @@ def get_output_filename(
     """
     Determine output filename based on command line arguments and config.
 
+    Auto-generated names get a two-digit prefix counter (``01_output.txt``,
+    ``02_output.txt``, ...); an explicit ``-o`` name is kept verbatim and only
+    falls back to the ``_N`` suffix scheme when the target already exists.
+
     Args:
         args: Parsed command line arguments.
         config: Configuration dictionary.
@@ -611,16 +616,30 @@ def get_output_filename(
             # Relative path: prepend output_dir from config
             base_dir = Path(config["output_dir"])
             path = base_dir / path
+        # Never overwrite an explicitly given file: fall back to the _N scheme.
+        if create_file and path.exists():
+            return get_next_filename(str(path))
         return str(path)
 
-    # No command line output specified: use OUTPUT_DIR / default_output
+    # No command line output specified: use OUTPUT_DIR / default_output with a
+    # two-digit prefix counter (01_output.txt, 02_output.txt, ...).
     base_dir = Path(config["output_dir"])
-    candidate = base_dir / config["default_output"]
+    default = Path(config["default_output"])
 
     # Only generate a unique filename if we actually intend to create the file
-    if create_file:
-        return get_next_filename(str(candidate))
-    return str(candidate)
+    if not create_file:
+        return str(base_dir / config["default_output"])
+
+    counter = 1
+    pattern = re.compile(rf"^(\d+)_{re.escape(default.stem)}{re.escape(default.suffix)}$")
+    if base_dir.is_dir():
+        for existing in base_dir.iterdir():
+            match = pattern.match(existing.name)
+            if match:
+                counter = max(counter, int(match.group(1)) + 1)
+    # Two-digit padding keeps lexical sorting chronological only up to 99 files;
+    # beyond that the prefix grows (100_, ...) and sorting/ordering breaks.
+    return str(base_dir / f"{counter:02d}_{default.stem}{default.suffix}")
 
 
 def perform_export(

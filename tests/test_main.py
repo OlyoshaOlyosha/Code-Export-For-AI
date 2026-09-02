@@ -86,6 +86,120 @@ class TestGetOutputFilename:
         result = get_output_filename(args, sample_config_dict, create_file=True)
         assert result == expected, f"Unexpected {result}"
 
+    def test_first_auto_export_gets_01_prefix(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Missing output directory -> counter starts at 1 (01_output.txt)."""
+        sample_config_dict["output_dir"] = str(tmp_path / "outputs")
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(tmp_path / "outputs" / "01_output.txt")
+
+    def test_auto_counter_increments(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Existing 01_/02_ files -> next export is 03_output.txt."""
+        out_dir = tmp_path / "outputs"
+        out_dir.mkdir()
+        (out_dir / "01_output.txt").write_text("")
+        (out_dir / "02_output.txt").write_text("")
+        sample_config_dict["output_dir"] = str(out_dir)
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(out_dir / "03_output.txt")
+
+    def test_auto_counter_per_directory_independent(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Each target directory has its own counter."""
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        (dir_a / "01_output.txt").write_text("")
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        first = get_output_filename(args, {**sample_config_dict, "output_dir": str(dir_a)}, create_file=True)
+        second = get_output_filename(args, {**sample_config_dict, "output_dir": str(dir_b)}, create_file=True)
+        assert first == str(dir_a / "02_output.txt")
+        assert second == str(dir_b / "01_output.txt")
+
+    def test_auto_counter_ignores_old_suffix_files(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Old-scheme output_1.txt and unrelated files do not affect the prefix counter."""
+        out_dir = tmp_path / "outputs"
+        out_dir.mkdir()
+        (out_dir / "output_1.txt").write_text("")
+        (out_dir / "notes.txt").write_text("")
+        sample_config_dict["output_dir"] = str(out_dir)
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(out_dir / "01_output.txt")
+
+    def test_auto_counter_escapes_regex_special_stem(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Stem with regex-special chars is matched literally."""
+        out_dir = tmp_path / "outputs"
+        out_dir.mkdir()
+        (out_dir / "01_report[1].txt").write_text("")
+        cfg = {**sample_config_dict, "output_dir": str(out_dir), "default_output": "report[1].txt"}
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, cfg, create_file=True)
+        assert result == str(out_dir / "02_report[1].txt")
+
+    def test_create_file_false_keeps_plain_name(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """create_file=False -> plain default name without prefix."""
+        sample_config_dict["output_dir"] = str(tmp_path / "outputs")
+        args = argparse.Namespace(output=None)
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=False)
+        assert result == str(tmp_path / "outputs" / "output.txt")
+
+    def test_output_arg_relative_keeps_exact_name(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """Relative -o name kept verbatim when the target does not exist."""
+        sample_config_dict["output_dir"] = str(tmp_path / "outputs")
+        args = argparse.Namespace(output="myreport.txt")
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(tmp_path / "outputs" / "myreport.txt")
+
+    def test_output_arg_collision_falls_back_to_suffix(
+        self, tmp_path: Path, sample_config_dict: dict[str, Any]
+    ) -> None:
+        """Existing -o target -> _1 fallback instead of overwrite."""
+        out_dir = tmp_path / "outputs"
+        out_dir.mkdir()
+        (out_dir / "myreport.txt").write_text("")
+        sample_config_dict["output_dir"] = str(out_dir)
+        args = argparse.Namespace(output="myreport.txt")
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(out_dir / "myreport_1.txt")
+
+    def test_output_arg_with_directory_collision(self, tmp_path: Path, sample_config_dict: dict[str, Any]) -> None:
+        """-o with subdirectories: collision resolved inside that parent."""
+        sub = tmp_path / "outputs" / "sub"
+        sub.mkdir(parents=True)
+        (sub / "rep.txt").write_text("")
+        sample_config_dict["output_dir"] = str(tmp_path / "outputs")
+        args = argparse.Namespace(output="sub/rep.txt")
+
+        from main import get_output_filename
+
+        result = get_output_filename(args, sample_config_dict, create_file=True)
+        assert result == str(sub / "rep_1.txt")
+
 
 # ---------------------------------------------------------------------------
 # check_export_options

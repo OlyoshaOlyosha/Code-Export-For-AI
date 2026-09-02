@@ -71,6 +71,14 @@ class TestGetNextFilename:
         result = get_next_filename(base)
         assert result == expected
 
+    def test_path_with_directory_parts_uses_parent(self, tmp_path: Path) -> None:
+        """-o style path with directories -> counter resolved in the file's parent."""
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        (subdir / "report.txt").write_text("")
+        result = get_next_filename(str(subdir / "report.txt"))
+        assert result == str(subdir / "report_1.txt")
+
 
 # ---------------------------------------------------------------------------
 # print_statistics

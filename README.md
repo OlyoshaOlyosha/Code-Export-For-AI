@@ -198,6 +198,7 @@ Language detection for code fences uses a built‑in extension‑to‑language m
 - Export **only the project structure** (no file contents) by setting `EXPORT_CONTENT = False`.
 - If the output is too big for the clipboard, raise `MAX_CLIPBOARD_CHARS` or set it to `0`.
 - Create multiple config profiles in `configs/` (even in subdirectories) and switch with `-c` or via the re‑export loop.
+- Without `-o`, exports are named `NN_output.txt` (`01_output.txt`, `02_output.txt`, …) with an increasing counter, so repeated exports never overwrite each other.
 - Statistics show an approximate token count (vs a 128k context limit), helping you gauge whether the export fits common AI windows.
 - In the re‑export loop:
   - **Enter** – repeat the same mode (full or delta), reloading the config from disk.
