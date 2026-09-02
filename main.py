@@ -305,8 +305,35 @@ def select_config_file(requested_config: str | None) -> Path | None:
     return None
 
 
+# Documented defaults for every required config setting; used when a user
+# config omits a setting (issue #4). Shared set() instances are safe here:
+# the blacklists are only read, never mutated downstream.
+DEFAULTS = {
+    "BLACKLIST_EXTENSIONS": set(),
+    "BLACKLIST_DIRS": set(),
+    "BLACKLIST_FILENAMES": set(),
+    "FILENAME_FILTER_MODE": "exact",
+    "OUTPUT_DIR": "outputs",
+    "OUTPUT_FILENAME": "output.txt",
+    "MAX_FILE_SIZE_MB": 5,
+    "CREATE_FILE": True,
+    "COPY_TO_CLIPBOARD": False,
+    "INCLUDE_EMPTY_FILES": True,
+    "EXPORT_STRUCTURE": True,
+    "EXPORT_CONTENT": True,
+    "SHOW_EMPTY_DIRS": False,
+    "MAX_CLIPBOARD_CHARS": 500000,
+    "MAX_DEPTH": -1,
+    "USE_GITIGNORE": False,
+    "ALLOWED_EXTENSIONLESS_FILES": set(),
+    "ALLOWED_DIRS": set(),
+}
+
+
 def load_config(config_path: Path) -> dict[str, Any]:
     """Dynamically load a configuration module from the given path.
+
+    Missing settings fall back to the documented defaults (``DEFAULTS``).
 
     Args:
         config_path: Path to the .py configuration file.
@@ -315,7 +342,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
         Dictionary containing the configuration values.
 
     Raises:
-        SystemExit: If the file is missing, cannot be imported, or is incomplete.
+        SystemExit: If the file is missing, cannot be imported, or contains
+            a setting with a wrong type or out-of-range value.
 
     """
     if not config_path.exists():
@@ -368,15 +396,9 @@ def load_config(config_path: Path) -> dict[str, Any]:
     config_dict = {}
     for attr, expected_type in required_attrs.items():
         if not hasattr(module, attr):
-            # Provide defaults for optional settings (backward compatibility)
-            if attr in ("USE_GITIGNORE", "ALLOWED_EXTENSIONLESS_FILES", "ALLOWED_DIRS"):
-                default = False if attr == "USE_GITIGNORE" else set()
-                config_dict[attr.lower()] = default
-                continue
-            error(f"ERROR: Configuration file is missing required setting: {attr}")
-            info("Please ensure the configuration contains all settings from the template.")
-            input("\nPress Enter to exit...")
-            raise SystemExit(1)
+            # Missing setting: fall back to the documented default (issue #4)
+            config_dict[attr.lower()] = DEFAULTS[attr]
+            continue
         value = getattr(module, attr)
         if not isinstance(value, expected_type):
             error(f"ERROR: Configuration setting {attr} has wrong type (expected {expected_type})")

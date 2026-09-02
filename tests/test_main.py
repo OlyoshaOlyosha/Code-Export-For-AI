@@ -142,6 +142,47 @@ ALLOWED_EXTENSIONLESS_FILES = {"Dockerfile"}
         assert result["copy_to_buffer"] is False
         assert result["blacklist_extensions"] == {"txt", "md"}
 
+    def test_minimal_config_gets_defaults(self, tmp_path: Path) -> None:
+        """Config with only BLACKLIST_EXTENSIONS loads; missing settings use defaults."""
+        config_file = tmp_path / "config.py"
+        config_file.write_text('BLACKLIST_EXTENSIONS = {"txt"}\n')
+
+        from main import load_config
+
+        result = load_config(config_file)
+        assert result["blacklist_extensions"] == {"txt"}
+        assert result["blacklist_dirs"] == set()
+        assert result["blacklist_filenames"] == set()
+        assert result["filename_filter_mode"] == "exact"
+        assert result["output_dir"] == "outputs"
+        assert result["default_output"] == "output.txt"
+        assert result["max_size"] == 5 * 1024 * 1024
+        assert result["create_file"] is True
+        assert result["copy_to_buffer"] is False
+        assert result["include_empty_files"] is True
+        assert result["export_structure"] is True
+        assert result["export_content"] is True
+        assert result["show_empty_dirs"] is False
+        assert result["max_clipboard_chars"] == 500000
+        assert result["max_depth"] == -1
+        assert result["use_gitignore"] is False
+        assert result["allowed_extensionless_files"] == set()
+        assert result["allowed_dirs"] == set()
+        assert result["input_dir"] == ""
+        assert result["priority_patterns"] == []
+        assert result["low_priority_patterns"] == []
+
+    def test_wrong_typed_setting_still_exits(self, tmp_path: Path, mock_input: MagicMock) -> None:
+        """Explicit wrong-typed values still print the type error and SystemExit(1)."""
+        config_file = tmp_path / "config.py"
+        config_file.write_text('BLACKLIST_EXTENSIONS = {"txt"}\nOUTPUT_DIR = 123\n')
+
+        from main import load_config
+
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(config_file)
+        assert exc_info.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # load_app_config
