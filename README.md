@@ -93,7 +93,7 @@ python main.py -d "C:\path\to\project" -o export.txt -c python
 | Argument | Short | Description |
 |----------|-------|-------------|
 | `--directory` | `-d` | Path to the project directory. If omitted, a graphical folder picker opens (falls back to console input). |
-| `--output` | `-o` | Output file name. Relative paths are placed inside the effective output directory (`OUTPUT_DIR/config_name/`). If not given, the configuration’s default name is used with a sequential suffix (`_1`, `_2`, …) to avoid overwrites. |
+| `--output` | `-o` | Output file name. Relative paths are placed inside the effective output directory (`OUTPUT_DIR/config_name/`). If not given, exports are auto‑named `01_<name>.txt`, `02_<name>.txt`, … (prefix counter); if the exact `-o` name already exists, a `_1`/`_2` suffix is appended to avoid overwrites. |
 | `--config` | `-c` | Name of the configuration file. Accepts a path relative to `configs/` (e.g., `python` → `configs/python.py`), an absolute path, or a path relative to the current working directory. If the name lacks a `.py` extension and is not found, `.py` is appended automatically. When not specified, the tool auto‑selects the only config (if exactly one exists), shows an interactive tree menu for multiple configs, or falls back to a root `config.py`. |
 
 Clipboard support is cross‑platform: `pyperclip` is preferred, with native fallbacks (`clip`, `pbcopy`, `xclip`/`xsel`).
@@ -156,7 +156,7 @@ flowchart TD
 ## Configuration
 Configuration files live inside the `configs/` folder (legacy `config.py` in the project root is also supported). Copy the supplied `config.py` into `configs/` and tweak it. You can maintain multiple profiles (e.g., `python.py`, `frontend.py`) and organise them into subdirectories. The selection menu displays a tree with continuous numbering, relative paths, and the optional `CONFIG_DESCRIPTION`.
 
-**Output location** – the final file is placed inside `OUTPUT_DIR/config_name/`. For example, with `OUTPUT_DIR = "outputs"` and config `python.py`, files land in `outputs/python/`. The filename is taken from `OUTPUT_FILENAME` (or `-o`), possibly with a sequential suffix to prevent overwrites.
+**Output location** – the final file is placed inside `OUTPUT_DIR/config_name/`. For example, with `OUTPUT_DIR = "outputs"` and config `python.py`, files land in `outputs/python/`. The filename comes from `OUTPUT_FILENAME` (or `-o`); auto‑generated names get an increasing `NN_` prefix so repeated exports never overwrite each other.
 
 **Configuration description** – add a one‑line `CONFIG_DESCRIPTION` to any config file; it will appear next to the config name in the interactive tree.
 
@@ -233,7 +233,7 @@ After a full export you can create an incremental snapshot containing **only the
 - The tool remembers the timestamp of the last full export and includes only files modified after that moment.
 - The project tree in delta mode shows only the changed files and their parent directories (no empty folders).
 - To go back to a complete export, press `F` – this also resets the baseline so that the next `M` will compare against this new full export.
-- Delta mode works with the same output file numbering, so your incremental snapshots are saved separately (e.g., `output_2.txt` after a delta, `output_3.txt` after another delta).
+- Delta mode works with the same output file numbering, so your incremental snapshots are saved separately (e.g., `04_output.txt` after a delta, `05_output.txt` after another one).
 
 ### Disabling update notifications
 If you prefer not to be notified about new releases, open `app_config.py` (next to `main.py`) and set:
