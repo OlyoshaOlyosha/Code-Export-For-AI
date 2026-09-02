@@ -208,6 +208,7 @@ __marimo__/
 
 # AI config (agent runtime: skills, node_modules, backlog)
 .opencode/
+.zcode/
 AGENTS.md
 
 # Other
