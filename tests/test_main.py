@@ -294,6 +294,10 @@ class TestMainIntegration:
             patch("sys.argv", ["main.py"]),
             patch("main.check_for_updates"),
             patch("main.select_directory", return_value=str(project_dir)),
+            # Patch the loop's prompt directly: main binds `prompt` at import
+            # time, so a MagicMock bound by an earlier test's mock_console
+            # would otherwise answer "" ("repeat export") forever.
+            patch("main.prompt", return_value="n"),
             patch(
                 "main.export_project",
                 return_value=({".": ["main.py"]}, 100, "fake output", MagicMock()),
