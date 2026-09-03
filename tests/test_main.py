@@ -680,3 +680,66 @@ class TestMainArgHelpers:
         ):
             result = select_config_file(None)
         assert result == files[1]
+
+
+# ---------------------------------------------------------------------------
+# --check-config validation flag (issue #10)
+# ---------------------------------------------------------------------------
+class TestCheckConfigFlag:
+    def test_check_config_parsed(self) -> None:
+        """--check-config value lands in args.check_config."""
+        from main import parse_arguments
+
+        with patch.object(sys, "argv", ["main.py", "--check-config", "my.py"]):
+            args = parse_arguments()
+
+        assert args.check_config == "my.py"
+
+    def test_check_config_defaults_to_none(self) -> None:
+        """Without the flag, args.check_config is None."""
+        from main import parse_arguments
+
+        with patch.object(sys, "argv", ["main.py"]):
+            args = parse_arguments()
+
+        assert args.check_config is None
+
+    def test_valid_config_prints_summary_and_exits(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Valid config: description + OK summary printed, main() returns normally (exit 0)."""
+        cfg = tmp_path / "good.py"
+        cfg.write_text('CONFIG_DESCRIPTION = "Good profile"\nBLACKLIST_EXTENSIONS = {"txt"}\n')
+        with patch.object(sys, "argv", ["main.py", "--check-config", str(cfg)]):
+            from main import main
+
+            main()  # must return without SystemExit
+
+        out = capsys.readouterr().out
+        assert "Good profile" in out
+        assert "settings loaded" in out
+
+    def test_broken_config_exits_1(self, tmp_path: Path, mock_input: MagicMock) -> None:
+        """Wrong-typed setting (OUTPUT_DIR = 123) -> SystemExit(1)."""
+        cfg = tmp_path / "bad.py"
+        cfg.write_text("OUTPUT_DIR = 123\n")
+        with patch.object(sys, "argv", ["main.py", "--check-config", str(cfg)]):
+            from main import main
+
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+
+    def test_check_config_wins_over_directory(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """--check-config combined with -d: the check wins, main returns before any scan."""
+        cfg = tmp_path / "good.py"
+        cfg.write_text("BLACKLIST_EXTENSIONS = set()\n")
+        with (
+            patch.object(sys, "argv", ["main.py", "--check-config", str(cfg), "-d", str(tmp_path)]),
+            patch("main.export_project") as mock_export,
+        ):
+            from main import main
+
+            main()
+
+        mock_export.assert_not_called()
+        assert "settings loaded" in capsys.readouterr().out

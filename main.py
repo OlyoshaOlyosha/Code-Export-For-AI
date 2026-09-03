@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from exporter.console import error, header, info, prompt, warning
+from exporter.console import error, header, info, prompt, success, warning
 from exporter.processor import export_project
 from exporter.updater import check_for_updates
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
@@ -545,6 +545,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Scan and show statistics without writing a file or copying to the clipboard",
     )
+    parser.add_argument(
+        "--check-config",
+        metavar="CONFIG",
+        help="Validate a configuration file and exit",
+    )
     return parser.parse_args()
 
 
@@ -715,6 +720,18 @@ def main() -> None:
         header(f"{__app_name__} v{__version__}")
 
         args = parse_arguments()
+
+        # --check-config: validate a configuration file and exit before any
+        # scan (issue #10); wins over -d/--config. load_config() already
+        # prints error details and raises SystemExit(1) on failure.
+        if args.check_config:
+            check_path = Path(args.check_config)
+            config_dict = load_config(check_path)
+            description = _get_config_description(check_path)
+            if description:
+                info(f"Description: {description}")
+            success(f"Configuration is valid ({len(config_dict)} settings loaded)")
+            return
 
         # 1. Choose configuration file
         config_path = select_config_file(args.config)
