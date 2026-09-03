@@ -549,6 +549,112 @@ class TestMainIntegration:
 
 
 # ---------------------------------------------------------------------------
+# --version / --dry-run flags (issue #9)
+# ---------------------------------------------------------------------------
+class TestParseArgumentsFlags:
+    def test_version_constants_are_module_level(self) -> None:
+        """Version constants live at module level, not inside main()."""
+        import main
+
+        assert main.__app_name__ == "Project2Prompt"
+        assert main.__version__ == "1.4.0"
+
+    def test_version_flag_prints_and_exits_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--version prints the version string and exits via SystemExit(0)."""
+        from main import parse_arguments
+
+        with (
+            patch.object(sys, "argv", ["main.py", "--version"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            parse_arguments()
+
+        assert exc_info.value.code == 0
+        assert "Project2Prompt v1.4.0" in capsys.readouterr().out
+
+    def test_dry_run_flag_parses_true(self) -> None:
+        """--dry-run is exposed as args.dry_run."""
+        from main import parse_arguments
+
+        with patch.object(sys, "argv", ["main.py", "--dry-run"]):
+            args = parse_arguments()
+
+        assert args.dry_run is True
+
+    def test_dry_run_flag_defaults_to_false(self) -> None:
+        """Without --dry-run, args.dry_run is False."""
+        from main import parse_arguments
+
+        with patch.object(sys, "argv", ["main.py"]):
+            args = parse_arguments()
+
+        assert args.dry_run is False
+
+
+class TestMainDryRunIntegration:
+    def test_dry_run_scans_without_writing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mock_input: MagicMock,
+    ) -> None:
+        """--dry-run exports with create_file=False/copy_to_buffer=False despite CREATE_FILE=True (issue #9)."""
+        configs_dir = tmp_path / "configs"
+        configs_dir.mkdir()
+        cfg = configs_dir / "test.py"
+        cfg.write_text(
+            "BLACKLIST_EXTENSIONS = set()\n"
+            "BLACKLIST_DIRS = set()\n"
+            "BLACKLIST_FILENAMES = set()\n"
+            "FILENAME_FILTER_MODE = 'exact'\n"
+            "OUTPUT_DIR = 'out'\n"
+            "OUTPUT_FILENAME = 'out.txt'\n"
+            "MAX_FILE_SIZE_MB = 5\n"
+            "CREATE_FILE = True\n"
+            "COPY_TO_CLIPBOARD = False\n"
+            "INCLUDE_EMPTY_FILES = True\n"
+            "EXPORT_STRUCTURE = True\n"
+            "EXPORT_CONTENT = True\n"
+            "SHOW_EMPTY_DIRS = False\n"
+            "MAX_CLIPBOARD_CHARS = 5000\n"
+            "MAX_DEPTH = -1\n"
+            "USE_GITIGNORE = False\n"
+            "ALLOWED_EXTENSIONLESS_FILES = set()\n"
+        )
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        (project_dir / "main.py").write_text("print(1)")
+        monkeypatch.chdir(tmp_path)
+        mock_input.side_effect = ["n"]
+        # Simulate a TTY for this integration run (same pattern as TestMainIntegration).
+        interactive_stdin = MagicMock()
+        interactive_stdin.isatty.return_value = True
+        monkeypatch.setattr(sys, "stdin", interactive_stdin)
+
+        with (
+            patch("sys.argv", ["main.py", "--dry-run", "-d", str(project_dir)]),
+            patch("main.check_for_updates"),
+            patch("main.prompt", return_value="n"),
+            patch(
+                "main.export_project",
+                return_value=({".": ["main.py"]}, 100, "fake output", MagicMock()),
+            ) as mock_export,
+            patch("main.print_statistics"),
+        ):
+            from main import main
+
+            main()
+
+        mock_export.assert_called_once()
+        assert mock_export.call_args.kwargs["create_file"] is False
+        assert mock_export.call_args.kwargs["copy_to_buffer"] is False
+        # create_file=False skips the two-digit counter prefix.
+        assert mock_export.call_args.args[1] == str(Path("out") / "test" / "out.txt")
+        # Nothing was written anywhere under the temp workspace.
+        assert list(tmp_path.rglob("*.txt")) == []
+
+
+# ---------------------------------------------------------------------------
 # Additional main.py helper tests (argument parsing / config / input dir)
 # ---------------------------------------------------------------------------
 class TestMainArgHelpers:

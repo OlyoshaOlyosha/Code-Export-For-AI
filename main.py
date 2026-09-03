@@ -19,6 +19,9 @@ from exporter.processor import export_project
 from exporter.updater import check_for_updates
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
+__version__ = "1.4.0"
+__app_name__ = "Project2Prompt"
+
 
 def _stdin_is_interactive() -> bool:
     """Return True only when stdin is a real interactive TTY.
@@ -536,6 +539,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-c", "--config", help="Name of the configuration file (e.g., 'config.py') from the 'configs/' folder"
     )
+    parser.add_argument("--version", action="version", version=f"{__app_name__} v{__version__}")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Scan and show statistics without writing a file or copying to the clipboard",
+    )
     return parser.parse_args()
 
 
@@ -702,9 +711,6 @@ def perform_export(
 
 
 def main() -> None:
-    __version__ = "1.4.0"
-    __app_name__ = "Project2Prompt"
-
     try:
         header(f"{__app_name__} v{__version__}")
 
@@ -739,6 +745,12 @@ def main() -> None:
             base_out = Path(cfg["output_dir"])
             cfg["output_dir"] = str(base_out / config_stem)
             cfg = check_export_options(cfg)
+            if cfg and args.dry_run:
+                # Applied after check_export_options on purpose: a dry run must
+                # write nothing, bypassing its both-disabled -> create_file override.
+                cfg["create_file"] = False
+                cfg["copy_to_buffer"] = False
+                info("Dry run: no file will be written and the clipboard will not be used.")
             return cfg or None
 
         # ── First export ───────────────────────────────────────────────────
