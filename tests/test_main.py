@@ -376,6 +376,62 @@ class TestGetInputDirectoryAdditional:
 
 
 # ---------------------------------------------------------------------------
+# get_input_directory — non-interactive stdin guard (issue #8)
+# ---------------------------------------------------------------------------
+class TestGetInputDirectoryNonInteractive:
+    def test_no_preset_returns_empty_without_picker(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-TTY stdin, no -d and no INPUT_DIR -> "" via error, no Tkinter (issue #8)."""
+        args = argparse.Namespace(directory=None)
+        from main import get_input_directory
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO())  # isatty() -> False
+        with (
+            patch("tkinter.Tk") as mock_tk,  # must never be constructed in headless runs
+            patch("main.select_directory") as mock_select,
+            patch("main.error") as mock_error,
+        ):
+            result = get_input_directory(args, "")
+
+        assert result == ""
+        mock_select.assert_not_called()
+        mock_tk.assert_not_called()
+        assert mock_error.call_count == 1
+        assert "No input directory could be resolved" in mock_error.call_args[0][0]
+
+    def test_missing_preset_returns_empty_without_picker(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-TTY stdin + INPUT_DIR pointing to a missing path -> "" without picker (issue #8)."""
+        args = argparse.Namespace(directory=None)
+        from main import get_input_directory
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO())
+        with (
+            patch("tkinter.Tk") as mock_tk,
+            patch("main.select_directory") as mock_select,
+            patch("main.error") as mock_error,
+        ):
+            result = get_input_directory(args, str(tmp_path / "missing"))
+
+        assert result == ""
+        mock_select.assert_not_called()
+        mock_tk.assert_not_called()
+        assert mock_error.call_count == 1
+
+    def test_interactive_stdin_still_uses_picker(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Interactive stdin -> picker behaviour unchanged, its value is returned."""
+        args = argparse.Namespace(directory=None)
+        from main import get_input_directory
+
+        interactive_stdin = MagicMock()
+        interactive_stdin.isatty.return_value = True
+        monkeypatch.setattr(sys, "stdin", interactive_stdin)
+        with patch("main.select_directory", return_value="/picked/dir") as mock_select:
+            result = get_input_directory(args, "")
+
+        mock_select.assert_called_once_with()
+        assert result == "/picked/dir"
+
+
+# ---------------------------------------------------------------------------
 # _display_config_tree
 # ---------------------------------------------------------------------------
 class TestDisplayConfigTree:
@@ -465,6 +521,11 @@ class TestMainIntegration:
         (project_dir / "main.py").write_text("print(1)")
         monkeypatch.chdir(tmp_path)
         mock_input.side_effect = ["n"]
+        # Issue #8: the folder picker now requires an interactive stdin, which
+        # pytest does not provide — simulate a TTY for this integration run.
+        interactive_stdin = MagicMock()
+        interactive_stdin.isatty.return_value = True
+        monkeypatch.setattr(sys, "stdin", interactive_stdin)
 
         with (
             patch("sys.argv", ["main.py"]),

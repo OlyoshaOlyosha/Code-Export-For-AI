@@ -20,6 +20,18 @@ from exporter.updater import check_for_updates
 from exporter.utils import OutputInfo, get_next_filename, print_statistics, select_directory
 
 
+def _stdin_is_interactive() -> bool:
+    """Return True only when stdin is a real interactive TTY.
+
+    Guards all stdin interaction (exit pause, GUI folder picker): pytest, CI
+    and piped runs have no interactive stdin (issues #5 and #8).
+    """
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except Exception:
+        return False
+
+
 def _pause_before_exit() -> None:
     """Wait for Enter before exiting, but only in an interactive terminal (issue #5).
 
@@ -27,7 +39,7 @@ def _pause_before_exit() -> None:
     stdin error is treated as non-interactive as well.
     """
     with contextlib.suppress(Exception):
-        if sys.stdin is not None and sys.stdin.isatty():
+        if _stdin_is_interactive():
             input("\nPress Enter to exit...")
 
 
@@ -538,7 +550,8 @@ def get_input_directory(args: argparse.Namespace, config_input_dir: str) -> str 
         config_input_dir: Optional directory preset from the configuration file.
 
     Returns:
-        Selected directory path or None if cancelled/invalid.
+        Selected directory path, "" when stdin is not interactive (issue #8),
+        or None if cancelled/invalid.
 
     """
     # 1. Command-line argument takes highest priority
@@ -580,6 +593,12 @@ def get_input_directory(args: argparse.Namespace, config_input_dir: str) -> str 
             warning("INPUT_DIR from config caused an error. Falling back to manual folder selection...")
 
     # 3. Fallback to GUI or console folder selection
+    if not _stdin_is_interactive():
+        # Headless run (pytest, CI, piped stdin): never open the GUI picker or
+        # prompt on stdin (issue #8); main() exits via its empty-input-dir path.
+        error("No input directory could be resolved. Run the tool in an interactive terminal to select a folder.")
+        return ""
+
     info("Select the project folder...")
     dir_path = select_directory()
     if not dir_path:
