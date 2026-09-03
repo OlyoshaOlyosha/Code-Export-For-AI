@@ -1,15 +1,20 @@
 """
-User configuration for Project2Prompt.
+Default (balanced) profile for Project2Prompt.
 
-Edit this file to customize filtering and behavior.
+This file lists every setting explicitly and works as the reference baseline.
+Your own profiles don't have to: any setting you omit falls back to the
+built-in defaults - write only the lines that differ (see configs/examples/).
 """
 
-# Brief description of this configuration (one line, ~80 chars max).
-# It will be shown in the configuration selection menu.
-CONFIG_DESCRIPTION = "Default configuration – all file types, balanced filters"
+# ── Identity ─────────────────────────────────────────────────────────────
+# Shown in the configuration selection menu (one line, ~80 chars max).
+CONFIG_DESCRIPTION = "Balanced default: code and text in, binaries and noise out"
 
-# File extensions to ignore (without dot)
+# ── 1. What to exclude ───────────────────────────────────────────────────
+
+# File extensions to ignore (without the dot), grouped by category.
 BLACKLIST_EXTENSIONS = {
+    # Documents and text
     "txt",
     "md",
     "markdown",
@@ -19,6 +24,7 @@ BLACKLIST_EXTENSIONS = {
     "docx",
     "xls",
     "xlsx",
+    # Images
     "png",
     "jpg",
     "jpeg",
@@ -27,16 +33,19 @@ BLACKLIST_EXTENSIONS = {
     "ico",
     "svg",
     "webp",
+    # Audio / video
     "mp3",
     "mp4",
     "avi",
     "mov",
     "wav",
+    # Archives
     "zip",
     "rar",
     "7z",
     "tar",
     "gz",
+    # Binaries and build artifacts
     "exe",
     "dll",
     "so",
@@ -47,61 +56,51 @@ BLACKLIST_EXTENSIONS = {
     "pyo",
     "pyd",
     "class",
+    # Databases
     "db",
     "sqlite",
     "mdb",
+    # Local config and machine state ("env" here means .env files with secrets)
     "ini",
     "cfg",
     "conf",
     "config",
     "env",
-    # Build artifacts and generated files
+    # Generated files
     "pyi",  # Type stub files
     "lock",  # Dependency lock files (poetry.lock, package-lock.json)
     "map",  # Source maps
 }
 
-# Extensionless files whitelist
-# Files without a file extension are normally excluded. Add names here to allow them.
-ALLOWED_EXTENSIONLESS_FILES = {
-    "Dockerfile",
-    "Makefile",
-    "README",
-    "LICENSE",
-}
-
-# Directories to completely skip
+# Directories to completely skip, grouped by category.
 BLACKLIST_DIRS = {
-    "__pycache__",
+    # IDE / editor / VCS internals
     ".git",
     ".vscode",
     ".vs",
     ".idea",
+    # Build output and dependency folders
+    "__pycache__",
     "node_modules",
     "obj",
     "bin",
-    "venv",
-    "env",
-    "virtualenv",
     "dist",
     "build",
     "target",
     "packages",
+    # Virtual environments ("env" here is the virtualenv folder, not the .env file)
+    "venv",
+    "env",
+    "virtualenv",
+    ".venv",
+    "site-packages",
     # Caches and test outputs
     ".pytest_cache",
     ".mypy_cache",
     ".ruff_cache",
     "htmlcov",
     "coverage",
-    # Temporary directories
-    "tmp",
-    "temp",
-    "logs",
-    # Hidden/cache directories that previously were auto-skipped by the
-    # dot-prefix rule. Kept here so they stay excluded when USE_GITIGNORE is False.
-    ".venv",
-    ".cache",
-    ".tox",
+    # Bundler / framework caches
     ".next",
     ".parcel-cache",
     ".svelte-kit",
@@ -110,7 +109,12 @@ BLACKLIST_DIRS = {
     ".turbo",
     ".nuxt",
     ".output",
-    "site-packages",
+    # Temporary directories
+    "tmp",
+    "temp",
+    "logs",
+    ".cache",
+    ".tox",
 }
 
 # Force-include list of allowed directories (relative paths from project root).
@@ -123,15 +127,27 @@ BLACKLIST_DIRS = {
 # .gitignore unless explicitly listed here.
 ALLOWED_DIRS = set()
 
-# To exclude minified/bundled files (e.g., app.min.js, vendor.bundle.js),
-# add them here and set FILENAME_FILTER_MODE = "contains".
+# Individual files to exclude. Nothing is excluded by default; this is where
+# minified/bundled files belong (e.g. app.min.js, vendor.bundle.js) together
+# with FILENAME_FILTER_MODE = "contains".
 # Example: BLACKLIST_FILENAMES = {"min.", "bundle.", "chunk."}
 # Note: do NOT add these to BLACKLIST_EXTENSIONS -- that set works on the
 # part after the LAST dot, so "min.js" would only match a file named literally "min.js".
-BLACKLIST_FILENAMES = {"setup.py", "requirements.txt"}
+BLACKLIST_FILENAMES = set()
 
-# Filename matching mode: 'exact' or 'contains'
+# Filename matching mode for BLACKLIST_FILENAMES: 'exact' or 'contains'
 FILENAME_FILTER_MODE = "exact"
+
+# Extensionless files whitelist: files without an extension are normally
+# excluded. Add names here to allow them.
+ALLOWED_EXTENSIONLESS_FILES = {
+    "Dockerfile",
+    "Makefile",
+    "README",
+    "LICENSE",
+}
+
+# ── 2. Where to scan ─────────────────────────────────────────────────────
 
 # Default project directory to export.
 # Can be an absolute path, e.g.:
@@ -141,29 +157,30 @@ FILENAME_FILTER_MODE = "exact"
 # Leave empty ("") to always prompt for folder selection (GUI or console).
 INPUT_DIR: str = ""
 
-# Output settings
-OUTPUT_DIR = "outputs"  # Default directory for output files
-OUTPUT_FILENAME = "output.txt"  # Base name for output file (will be placed in OUTPUT_DIR)
-# Max file size to include (in MB). Set to 0 to disable the limit.
-MAX_FILE_SIZE_MB = 5
+# Directory traversal depth: -1 = unlimited, 0 = only the selected directory,
+# positive integer = at most N levels deep.
+MAX_DEPTH = -1
+
+# Respect the project's .gitignore on top of the blacklists above.
+USE_GITIGNORE = True
+
+# ── 3. Where to write ────────────────────────────────────────────────────
+
+OUTPUT_DIR = "outputs"  # Root folder for output files (per-config subfolder is added)
+OUTPUT_FILENAME = "output.txt"  # Base name; auto-numbered as 01_output.txt, 02_output.txt, ...
+MAX_FILE_SIZE_MB = 5  # Max file size to include (in MB). Set to 0 to disable the limit.
 CREATE_FILE = True  # Write output to file
 COPY_TO_CLIPBOARD = False  # Copy output to clipboard (opt-in; set True to enable)
+MAX_CLIPBOARD_CHARS = 500000  # Clipboard safety limit (0 disables it)
 
-# Export options
-EXPORT_STRUCTURE = True  # Include project directory tree in output
-EXPORT_CONTENT = True  # Include file contents (code) in output
+# ── 4. What goes into the output ─────────────────────────────────────────
 
+EXPORT_STRUCTURE = True  # Include project directory tree
+EXPORT_CONTENT = True  # Include file contents (code)
 SHOW_EMPTY_DIRS = True  # Include empty directories in the structure tree
-INCLUDE_EMPTY_FILES = True  # Include empty files in output (structure only, no empty code blocks)
+INCLUDE_EMPTY_FILES = True  # Include empty files (structure only, no empty code blocks)
 
-# Clipboard safety
-MAX_CLIPBOARD_CHARS = 500000  # Maximum characters to copy to clipboard (0 to disable)
-
-# Directory traversal depth
-MAX_DEPTH = -1  # -1 = unlimited, 0 = only selected directory, positive integer = max depth
-
-# .gitignore integration
-USE_GITIGNORE = True  # If True, also respect .gitignore rules (in addition to blacklists)
+# ── 5. File order inside the export ──────────────────────────────────────
 
 # Priority-based file ordering (optional).
 # Patterns use fnmatch syntax against the entire relative path.
